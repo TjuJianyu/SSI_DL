@@ -9,6 +9,11 @@ import scipy.signal as spsig
 import os
 from tqdm import tqdm
 import pickle 
+
+#os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+#os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+os.environ["CUDA_VISIBLE_DEVICES"]="-1"
+
 def wavereader(f_path):
     f = wave.open(f_path,"rb")
     params = f.getparams()
@@ -135,6 +140,8 @@ class datamanager():
         self.right = right.astype(int)
         self.teststart = self.left[0]
         self.blockid = 0
+        
+            
     def reset_test(self):
         self.teststart = self.left[0]
         self.blockid = 0
@@ -205,11 +212,137 @@ class datamanager():
             
         return np.array(lips,dtype='float'),np.array(togues,dtype='float'), np.array(label,dtype='float')   
 
-def imagereader():
-    cv2.imread()
+# def imagereader():
+#     cv2.imread()
+# # class Model(tf.keras.Model):
+# #     def __init__(self):
+# #         super(Model,self).__init__()
+
+
+def cnn_model_keras():
+    lips_inputs = tf.keras.Input(shape=(42,50,1))
+    tongue_inputs = tf.keras.Input(shape=(42,50,1))
     
+    layer = tf.keras.layers.Conv2D(filters=16,kernel_size=(5,5),\
+                                   padding='same',activation=tf.nn.relu)(lips_inputs)
+    layer = tf.keras.layers.MaxPool2D(pool_size=(2,2),padding='same')(layer)
+    layer = tf.keras.layers.BatchNormalization(axis=1)(layer)
+    lips = tf.keras.layers.Flatten()(layer)
+    
+    
+    layer = tf.keras.layers.Conv2D(filters=16,kernel_size=(5,5),\
+                                   padding='same',activation=tf.nn.relu)(tongue_inputs)
+    layer = tf.keras.layers.MaxPool2D(pool_size=(2,2),padding='same')(layer)
+    layer = tf.keras.layers.BatchNormalization(axis=1)(layer)
+    tongue = tf.keras.layers.Flatten()(layer)
+    
+    concat_lip_tog = tf.keras.layers.concatenate([lips,tongue])
+    
+    pred = tf.keras.layers.Dense(1,activation=None)(concat_lip_tog)
+    model = tf.keras.Model(inputs = [lips_inputs,tongue_inputs],outputs = pred)
+    return model
+
+
+def load_dataset():
+    if os.path.exists("../out/train_tongue_01.pkl") and \
+    os.path.exists("../out/train_lips_01.pkl") and \
+    os.path.exists("../out/train_lsf_01.pkl"):
+        f1 = open("../out/train_tongue_01.pkl","rb")
+        f2 = open("../out/train_lips_01.pkl","rb")
+        f3 = open("../out/train_lsf_01.pkl","rb")
+        f4 = open("../out/test_tongue_01.pkl","rb")
+        f5 = open("../out/test_lips_01.pkl","rb")
+        f6 = open("../out/test_lsf_01.pkl","rb")
+        train_tongue = pickle.load(f1)
+        train_lips = pickle.load(f2)
+        train_lsf = pickle.load(f3)
+        test_tongue = pickle.load(f4)
+        test_lips = pickle.load(f5)
+        test_lsf = pickle.load(f6)
+
+    else:
+        f = open("../out/test_lsf/lsf.pkl","rb")
+        lsf = pickle.load(f)
+        lips = []
+        tongue=[]
+        tong_fdir = "../out/resize_tongue/%s.tif"
+        lips_fdir = "../out/resize_lips/%s.tif"
+        for i in tqdm(range(1,68147)):
+            
+            ran = str(i)
+            for i in range(6-len(ran)):
+                ran = '0'+ran
+            lframe_0 = cv2.imread(lips_fdir%ran,0)
+            lframe_0 = np.array(lframe_0)
+            lips.append(lframe_0.reshape((lframe_0.shape[0],lframe_0.shape[1],1)))
+
+            tframe_0 = cv2.imread(tong_fdir%ran,0)
+            tframe_0 = np.array(tframe_0)
+            tongue.append(tframe_0.reshape((tframe_0.shape[0],tframe_0.shape[1],1)))
+        testrate=0.1
+        length = np.array([10670146,7050413,13645126,5311110,13410518])
+        length = (length / 44100*60)
+        test = length*testrate
+        left = length.cumsum() - test
+        right = length.cumsum()
+        left = left.astype(int)
+        right = right.astype(int)
+        test_lips,train_lips,test_tongue,train_tongue,test_lsf,train_lsf = [],[],[],[],[],[]
+        for i in range(len(left)):
+            test_lips.extend(lips[left[i]:right[i]])
+            test_tongue.extend(tongue[left[i]:right[i]])
+            test_lsf.extend(lsf[left[i]:right[i]])
+ 
+        for i in range(len(left)):
+            if i == 0:
+                start = 0
+            else:
+                start = right[i-1]
+            train_lips.extend(lips[start:left[i]])
+            train_tongue.extend(tongue[start:left[i]])
+            train_lsf.extend(lsf[start:left[i]])
+        train_lips = np.array(train_lips,dtype=int)
+        train_tongue = np.array(train_tongue,dtype=int)
+        train_lsf = np.array(train_lsf)
+        test_lips = np.array(test_lips,dtype=int)
+        test_tongue = np.array(test_tongue,dtype=int)
+        test_lsf = np.array(test_lsf)
+        print(test_lsf)
+        f1 = open("../out/train_tongue_01.pkl","wb")
+        f2 = open("../out/train_lips_01.pkl","wb")
+        f3 = open("../out/train_lsf_01.pkl","wb")
+        f4 = open("../out/test_tongue_01.pkl","wb")
+        f5 = open("../out/test_lips_01.pkl","wb")
+        f6 = open("../out/test_lsf_01.pkl","wb")
+        pickle.dump(train_tongue,f1)
+        pickle.dump(train_lips,f2)
+        pickle.dump(train_lsf,f3)
+        pickle.dump(test_tongue,f4)
+        pickle.dump(test_lips,f5)
+        pickle.dump(test_lsf,f6)   
+        f1.close()
+        f2.close()
+        f3.close()
+        f4.close()
+        f5.close()
+        f6.close()
+        
+    return train_tongue,train_lips,train_lsf,test_tongue,test_lips,test_lsf
+
+def keras_train():
+    train_tongue,train_lips,train_lsf,test_tongue,test_lips,test_lsf = load_dataset()
+
+    model = cnn_model_keras()
+    optimizer=tf.keras.optimizers.Adam(lr = 0.0001)
+    model.compile(optimizer=optimizer,loss='mse',metrics=['mse'])
+    earlystop = tf.keras.callbacks.EarlyStopping(monitor='val_loss',patience=5,mode='min')
+
+    model.fit([train_tongue,train_lips],train_lsf[:,0],validation_data=[[test_tongue,test_lips],test_lsf[:,0]],batch_size=512 ,epochs=10000,shuffle=True)#,callback=[earlystop,])
+
+
 def simple_cnn_model(lip_l=42,lip_w=50,tog_l=42, tog_w=50,log = True):
     
+  
     #input output format 
     lips = tf.placeholder(dtype='float32',shape=[None,lip_l,lip_w,1])
     togues = tf.placeholder(dtype='float32',shape=[None,tog_l,tog_w,1])
@@ -325,8 +458,12 @@ def train():
         trainwriter = tf.summary.FileWriter("logs/train"  ,sess.graph)
         testwriter  = tf.summary.FileWriter("logs/test"  ,sess.graph)
 
-        for i in range(10000):
-            lips_batch, togues_batch, label_batch = dm.get_batch(train=True,batchsize=256)
+        for i in tqdm(range(10000)):
+            lips_batch, togues_batch, label_batch = dm.get_batch(train=True,batchsize=2)
+            print("batch")
+            
+            rs = sess.run(pred,feed_dict=({lips:lips_batch,togues:togues_batch,y : label_batch[:,0][:,np.newaxis]}))
+            print(rs)
             rs = sess.run(optimizer,feed_dict=({lips:lips_batch,togues:togues_batch,y : label_batch[:,0][:,np.newaxis]}))
             
             if i % 100 == 0:
@@ -354,6 +491,7 @@ def train():
                 plt.close()
                 trainrs = sess.run(merged,feed_dict={lips:lips_batch,togues:togues_batch,y:label_batch[:,0][:,np.newaxis]})
                 trainwriter.add_summary(trainrs,i)
+
 
 
         
