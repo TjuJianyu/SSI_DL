@@ -27,9 +27,22 @@ def musicdata_wavereader():
     song_name ="MICRO_RecFile_1_20140523_%s_Micro_EGG_Sound_Capture_monoOutput1.wav"
     wave_dataset = []
     totalnframes = 0
+    
+    zerocount = 0
     for song in songs:
         wave_data, nchannels, sampwidth, framerate, nframes\
         = wavereader('../data/Songs_Audio/%s' % (song_name % song))
+        print(nframes)
+        print(nframes*1.0/44100 * 60)
+        print(int(nframes/44100) * 60)
+        
+        i = nframes-1
+        count = 0
+        while wave_data[i] == 0:
+            count += 1
+            i-=1
+        zerocount  += count
+        print("#zero end",count)
         #eliminate the last 10 * 1/60 s
         wave_data = wave_data[:-int(10 * framerate * 1/60)]
         nframes -= int(10 * framerate * 1/60)
@@ -37,7 +50,12 @@ def musicdata_wavereader():
         totalnframes += nframes
         print("loaded wave %s: nchannels %d, sampwidth %d, framerate %d, nframes %d" %\
               (song,nchannels, sampwidth, framerate, nframes))
-        
+    #print(zerocount)
+    wave_dataset = np.array(wave_dataset)
+   
+    wave_dataset = 2*(wave_dataset -(-32767))/ ( 32767 - (-32767))-1
+
+    #print(wave_dataset[:10])
     print("total # frames %d" % totalnframes)
     
     return wave_dataset, nchannels, sampwidth, framerate, totalnframes
@@ -54,12 +72,19 @@ def simple_audio2lsf(audio_data,order):
 
 def audio2lsf(audio_data, fps, order,hamming=False,\
               usefilter=True, downsample_rate=1, frame_length = 1/60, useGPU=False,bins=-1):
-    order = int(order / downsample_rate)
-    downsample_audio_data = spsig.decimate(audio_data, downsample_rate)
+    #order = int(order / downsample_rate)
+    #print(audio_data[:20])
+    downsample_audio_data = spsig.decimate(audio_data, 4,n=8,ftype='iir')
+    #print(len(audio_data),len(audio_data)*1.0/len(downsample_audio_data))
+    #print(len(downsample_audio_data))
+    #print(downsample_audio_data[:20])
+    #downsample_audio_data = audio_data
     fps = fps / downsample_rate
-    
+    #print(downsample_audio_data[:10])
     if usefilter:
-        downsample_audio_data = spsig.filtfilt([1,-0.95],1,downsample_audio_data)
+        downsample_audio_data = spsig.lfilter([1, -0.95],1,downsample_audio_data)
+    #print(downsample_audio_data[:20])
+    #print(spsig.lfilter([1,-0.95],1,[1,2,3,4,5,6,7,8,9]))
     exact_frame_length = fps * frame_length
     signal_length = len(downsample_audio_data)
     
@@ -67,61 +92,41 @@ def audio2lsf(audio_data, fps, order,hamming=False,\
     error = 0
     reproduce = []
     
-    if hamming:
-        downsample_audio_data = np.hstack([np.array([0]*int(exact_frame_length/2)) \
-                                           , downsample_audio_data , np.array([0]*int(exact_frame_length/2))])
-                                          
-        for i in tqdm(range(int(signal_length / exact_frame_length))):
-            start_index = int(i * exact_frame_length) - int(exact_frame_length/2)  + int(exact_frame_length/2) 
-            stop_index = int((i+1) * exact_frame_length) + int(exact_frame_length/2) + int(exact_frame_length/2) 
-            
-            frame = downsample_audio_data[start_index:stop_index]*spsig.hamming(stop_index-start_index)
-           
-            #plt.plot(range(len(frame)),frame)
-            #plt.show()
-            lpcfilter = lpc.nautocor(frame,order)
-            
-            reproduce_iter = list(lpcfilter(frame))
-            reproduce.extend(reproduce_iter)
+    downsample_audio_data = np.hstack([np.array([0]*int(exact_frame_length/2)) \
+                                       , downsample_audio_data , np.array([0]*int(exact_frame_length/2))])
 
-            err = ((frame - np.array(reproduce_iter))**2).mean()
-            error+=err
-            #print(error)
-            lpcfilter = list(lpcfilter)[0]
-            lsfPframe = lpd.poly2lsf([ lpcfilter[i] for i in range(order+1) ])
-            #print(lpcfilter,lsfPframe)
-            if bins > 0:
-                lsfPframe
-            #print(lsfPframe)
-            lsf.append(lsfPframe)
-        error = error / i 
-        print("error MSE:%.6f" % (error))
+    for i in tqdm(range(int(signal_length / exact_frame_length))):
+        start_index = int(i * exact_frame_length) - int(exact_frame_length/2)  + int(exact_frame_length/2) 
+        stop_index = int((i+1) * exact_frame_length) + int(exact_frame_length/2) + int(exact_frame_length/2) 
+        #print(start_index,stop_index)
+        frame = downsample_audio_data[start_index:stop_index]*spsig.hamming(stop_index-start_index)
+        #print(frame[360:379])
+        #print(len(frame))
+
+        #plt.plot(range(len(frame)),frame)
+        #plt.show()
+        lpcfilter = lpc.nautocor(frame,order)
+
+        reproduce_iter = list(lpcfilter(frame))
+        reproduce.extend(reproduce_iter)
+
+        err = ((frame - np.array(reproduce_iter))**2).mean()
+        error+=err
+        #print(error)
+        lpcfilter = list(lpcfilter)[0]
+        #print(lpcfilter)
+        lsfPframe = lpd.poly2lsf([ lpcfilter[i] for i in range(order+1) ])
+        #print(lsfPframe)
+        #1/0
+        #print(lpcfilter,lsfPframe)
+        if bins > 0:
+            lsfPframe
+        #print(lsfPframe)
+        lsf.append(lsfPframe)
+    error = error / i 
+    print("error MSE:%.6f" % (error))
         
-    else:
-        for i in tqdm(range(int(signal_length / exact_frame_length))):
-            start_index = int(i * exact_frame_length)
-            stop_index = int((i+1) * exact_frame_length)
-            frame = downsample_audio_data[start_index:stop_index]
-            lpcfilter = lpc.nautocor(frame,order)
-            
-            #plt.plot(range(len(frame)),frame)
-            #plt.show()
-            reproduce_iter = list(lpcfilter(frame))
-            reproduce.extend(reproduce_iter)
-            
-            err = ((frame - np.array(reproduce_iter))**2).mean()
-            error+=err
-            #print(error)
-            lpcfilter = list(lpcfilter)[0]
-            lsfPframe = lpd.poly2lsf([ lpcfilter[i] for i in range(order+1) ])
-            #print(lpcfilter,lsfPframe)
-            if bins > 0:
-                lsfPframe
-            #print(lsfPframe)
-            lsf.append(lsfPframe)
-        error = error / i 
-        print("error MSE:%.6f" % (error))
-    
+
     
     return np.array(lsf), np.array(reproduce), error 
         
@@ -511,7 +516,7 @@ if __name__ == "__main__":
 #     print( nchannels, sampwidth, framerate, nframes)
 #     print(wave_data)
     #musicdata_wavereader()
-    train()
+    keras_train()
 #     lpcfilter = lpc.nautocor([1, -2, 3, -4, -3, 2, -3, 2, 1], order=3)
 #     reproduct = lpcfilter([1, -2, 3, -4, -3, 2, -3, 2, 1])
 #     print(list(reproduct))
