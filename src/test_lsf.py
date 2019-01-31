@@ -69,16 +69,20 @@ import pickle
 # plt.title("effect of lpc reproduction")
 # plt.legend()
 # plt.show()  
+
 data,nchannels,sampwidth,framerate,nframes = ssi_cnn.musicdata_wavereader()
+
+# plt.plot(range(len(data)),data)
+# plt.show()
 
 lsf,reproduce,error = ssi_cnn.audio2lsf(data,framerate,12,hamming=True,downsample_rate=4)
 
 lsff = open("../out/test_lsf/lsf_hamming_ds4.pkl","wb")
 pickle.dump(lsf,lsff)
 
-f = wave.open("../out/test_lsf/filter_repro_hm_ds4_MICRO_RecFile_1_20140523_184341_Micro_EGG_Sound_Capture_monoOutput1.wav", "wb")
-f.setnchannels(nchannels)
-f.setsampwidth(sampwidth)
-f.setframerate(framerate)
-f.writeframes(reproduce.tostring())
-f.close()
+# f = wave.open("../out/test_lsf/filter_repro_hm_ds4_MICRO_RecFile_1_20140523_184341_Micro_EGG_Sound_Capture_monoOutput1.wav", "wb")
+# f.setnchannels(nchannels)
+# f.setsampwidth(sampwidth)
+# f.setframerate(framerate)
+# f.writeframes(reproduce.tostring())
+# f.close()
