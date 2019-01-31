@@ -64,7 +64,92 @@ def musicdata_wavereader():
     
     return wave_dataset, nchannels, sampwidth, framerate, totalnframes
 
+def load_dataset():
+    print('loading...')
+    if os.path.exists("../out/train_tongue_01.pkl") and \
+    os.path.exists("../out/train_lips_01.pkl") and \
+    os.path.exists("../out/train_lsf_01.pkl"):
+        f1 = open("../out/train_tongue_01.pkl","rb")
+        f2 = open("../out/train_lips_01.pkl","rb")
+        f3 = open("../out/train_lsf_01.pkl","rb")
+        f4 = open("../out/test_tongue_01.pkl","rb")
+        f5 = open("../out/test_lips_01.pkl","rb")
+        f6 = open("../out/test_lsf_01.pkl","rb")
+        train_tongue = pickle.load(f1)
+        train_lips = pickle.load(f2)
+        train_lsf = pickle.load(f3)
+        test_tongue = pickle.load(f4)
+        test_lips = pickle.load(f5)
+        test_lsf = pickle.load(f6)
 
+    else:
+        f = open("../out/test_lsf/lsf.pkl","rb")
+        lsf = pickle.load(f)
+        lips = []
+        tongue=[]
+        tong_fdir = "../out/resize_tongue/%s.tif"
+        lips_fdir = "../out/resize_lips/%s.tif"
+        for i in tqdm(range(1,68147)):
+            
+            ran = str(i)
+            for i in range(6-len(ran)):
+                ran = '0'+ran
+            lframe_0 = cv2.imread(lips_fdir%ran,0)
+            lframe_0 = np.array(lframe_0)
+            lips.append(lframe_0.reshape((lframe_0.shape[0],lframe_0.shape[1],1)))
+
+            tframe_0 = cv2.imread(tong_fdir%ran,0)
+            tframe_0 = np.array(tframe_0)
+            tongue.append(tframe_0.reshape((tframe_0.shape[0],tframe_0.shape[1],1)))
+        testrate=0.1
+        length = np.array([10670146,7050413,13645126,5311110,13410518])
+        length = (length / 44100*60)
+        test = length*testrate
+        left = length.cumsum() - test
+        right = length.cumsum()
+        left = left.astype(int)
+        right = right.astype(int)
+        test_lips,train_lips,test_tongue,train_tongue,test_lsf,train_lsf = [],[],[],[],[],[]
+        for i in range(len(left)):
+            test_lips.extend(lips[left[i]:right[i]])
+            test_tongue.extend(tongue[left[i]:right[i]])
+            test_lsf.extend(lsf[left[i]:right[i]])
+ 
+        for i in range(len(left)):
+            if i == 0:
+                start = 0
+            else:
+                start = right[i-1]
+            train_lips.extend(lips[start:left[i]])
+            train_tongue.extend(tongue[start:left[i]])
+            train_lsf.extend(lsf[start:left[i]])
+        train_lips = np.array(train_lips,dtype=int)
+        train_tongue = np.array(train_tongue,dtype=int)
+        train_lsf = np.array(train_lsf)
+        test_lips = np.array(test_lips,dtype=int)
+        test_tongue = np.array(test_tongue,dtype=int)
+        test_lsf = np.array(test_lsf)
+        print(test_lsf)
+        f1 = open("../out/train_tongue_01.pkl","wb")
+        f2 = open("../out/train_lips_01.pkl","wb")
+        f3 = open("../out/train_lsf_01.pkl","wb")
+        f4 = open("../out/test_tongue_01.pkl","wb")
+        f5 = open("../out/test_lips_01.pkl","wb")
+        f6 = open("../out/test_lsf_01.pkl","wb")
+        pickle.dump(train_tongue,f1)
+        pickle.dump(train_lips,f2)
+        pickle.dump(train_lsf,f3)
+        pickle.dump(test_tongue,f4)
+        pickle.dump(test_lips,f5)
+        pickle.dump(test_lsf,f6)   
+        f1.close()
+        f2.close()
+        f3.close()
+        f4.close()
+        f5.close()
+        f6.close()
+        
+    return train_tongue,train_lips,train_lsf,test_tongue,test_lips,test_lsf
 
 
 def simple_audio2lsf(audio_data,order):
@@ -232,7 +317,7 @@ def spectral_distortion(lsf_true,lsf_pred,N,n0,n1):
     IS16SD = []
     print(len(lsf_true))
     print(len(lsf_pred))
-    for frameid in tqdm(range(len(lsf_true))):
+    for frameid in range(len(lsf_true)):
         lpc_true = lpd.lsf2poly(lsf_true[frameid])
         lpc_pred = lpd.lsf2poly(lsf_pred[frameid])
 
@@ -263,10 +348,7 @@ def cnn_model_keras(classification=0,multi_task=True):
     layer = tf.keras.layers.MaxPool2D(pool_size=(2,2),padding='same')(layer)
     layer = tf.keras.layers.BatchNormalization(axis=1)(layer)
     
-    layer = tf.keras.layers.Conv2D(filters=32,kernel_size=(3,3),\
-                                   padding='same',activation=tf.nn.relu)(lips_inputs)
-    layer = tf.keras.layers.MaxPool2D(pool_size=(2,2),padding='same')(layer)
-    layer = tf.keras.layers.BatchNormalization(axis=1)(layer)
+
     lips = tf.keras.layers.Flatten()(layer)
     
     
@@ -274,10 +356,7 @@ def cnn_model_keras(classification=0,multi_task=True):
                                    padding='same',activation=tf.nn.relu)(tongue_inputs)
     layer = tf.keras.layers.MaxPool2D(pool_size=(2,2),padding='same')(layer)
     layer = tf.keras.layers.BatchNormalization(axis=1)(layer)
-    layer = tf.keras.layers.Conv2D(filters=32,kernel_size=(3,3),\
-                                   padding='same',activation=tf.nn.relu)(tongue_inputs)
-    layer = tf.keras.layers.MaxPool2D(pool_size=(2,2),padding='same')(layer)
-    layer = tf.keras.layers.BatchNormalization(axis=1)(layer)
+
     tongue = tf.keras.layers.Flatten()(layer)
     
     concat_lip_tog = tf.keras.layers.concatenate([lips,tongue])
@@ -286,8 +365,10 @@ def cnn_model_keras(classification=0,multi_task=True):
         if multi_task:
             pred = []
             for i in range(12):
+                #sub_pred = concat_lip_tog
                 sub_pred = tf.keras.layers.Dense(1000, activation = tf.nn.relu, \
                                                  name='neck_each%i' % i)(concat_lip_tog)
+                
                 sub_pred = tf.keras.layers.Dense(classification, \
                                                  activation=tf.nn.softmax,\
                                                  name='pred_lsf%d' % i)(sub_pred)
@@ -304,9 +385,11 @@ def cnn_model_keras(classification=0,multi_task=True):
         if multi_task:
             pred = []
             for i in range(12):
+                sub_pred = tf.keras.layers.Dense(1000, activation = tf.nn.relu, \
+                                                 name='neck_each%i' % i)(concat_lip_tog)
                 sub_pred = tf.keras.layers.Dense(1, \
                                                  activation=None,\
-                                                 name='pred_lsf%d' % i)(concat_lip_tog)
+                                                 name='pred_lsf%d' % i)(sub_pred)
                 pred.append(sub_pred)
             model = tf.keras.Model(inputs =[lips_inputs,tongue_inputs], \
                                    outputs = pred)        
@@ -318,134 +401,11 @@ def cnn_model_keras(classification=0,multi_task=True):
     return model
 
 
-def cnn_model_deep_keras():
-    lips_inputs = tf.keras.Input(shape=(42,50,1))
-    tongue_inputs = tf.keras.Input(shape=(42,50,1))
-    
-    layer = tf.keras.layers.Conv2D(filters=16,kernel_size=(5,5),\
-                                   padding='same',activation=tf.nn.relu)(lips_inputs)
-    layer = tf.keras.layers.MaxPool2D(pool_size=(2,2),padding='same')(layer)
-    layer = tf.keras.layers.BatchNormalization(axis=1)(layer)
-    
-    layer = tf.keras.layers.Conv2D(filters=32,kernel_size=(3,3),\
-                                   padding='same',activation=tf.nn.relu)(lips_inputs)
-    layer = tf.keras.layers.MaxPool2D(pool_size=(2,2),padding='same')(layer)
-    layer = tf.keras.layers.BatchNormalization(axis=1)(layer)
-    lips = tf.keras.layers.Flatten()(layer)
-    
-    
-    layer = tf.keras.layers.Conv2D(filters=16,kernel_size=(5,5),\
-                                   padding='same',activation=tf.nn.relu)(tongue_inputs)
-    layer = tf.keras.layers.MaxPool2D(pool_size=(2,2),padding='same')(layer)
-    layer = tf.keras.layers.BatchNormalization(axis=1)(layer)
-    
-    layer = tf.keras.layers.Conv2D(filters=32,kernel_size=(3,3),\
-                                   padding='same',activation=tf.nn.relu)(tongue_inputs)
-    layer = tf.keras.layers.MaxPool2D(pool_size=(2,2),padding='same')(layer)
-    layer = tf.keras.layers.BatchNormalization(axis=1)(layer)
-    
-    tongue = tf.keras.layers.Flatten()(layer)
-    
-    concat_lip_tog = tf.keras.layers.concatenate([lips,tongue])
-    
-    pred = tf.keras.layers.Dense(int(concat_lip_tog.shape[1].value/2),activation=None)(concat_lip_tog)
-    pred = tf.keras.layers.Dense(1,activation=None)(concat_lip_tog)
-    model = tf.keras.Model(inputs = [lips_inputs,tongue_inputs],outputs = pred)
-    return model
 
-def load_dataset():
-    print('loading...')
-    if os.path.exists("../out/train_tongue_01.pkl") and \
-    os.path.exists("../out/train_lips_01.pkl") and \
-    os.path.exists("../out/train_lsf_01.pkl"):
-        f1 = open("../out/train_tongue_01.pkl","rb")
-        f2 = open("../out/train_lips_01.pkl","rb")
-        f3 = open("../out/train_lsf_01.pkl","rb")
-        f4 = open("../out/test_tongue_01.pkl","rb")
-        f5 = open("../out/test_lips_01.pkl","rb")
-        f6 = open("../out/test_lsf_01.pkl","rb")
-        train_tongue = pickle.load(f1)
-        train_lips = pickle.load(f2)
-        train_lsf = pickle.load(f3)
-        test_tongue = pickle.load(f4)
-        test_lips = pickle.load(f5)
-        test_lsf = pickle.load(f6)
-
-    else:
-        f = open("../out/test_lsf/lsf.pkl","rb")
-        lsf = pickle.load(f)
-        lips = []
-        tongue=[]
-        tong_fdir = "../out/resize_tongue/%s.tif"
-        lips_fdir = "../out/resize_lips/%s.tif"
-        for i in tqdm(range(1,68147)):
-            
-            ran = str(i)
-            for i in range(6-len(ran)):
-                ran = '0'+ran
-            lframe_0 = cv2.imread(lips_fdir%ran,0)
-            lframe_0 = np.array(lframe_0)
-            lips.append(lframe_0.reshape((lframe_0.shape[0],lframe_0.shape[1],1)))
-
-            tframe_0 = cv2.imread(tong_fdir%ran,0)
-            tframe_0 = np.array(tframe_0)
-            tongue.append(tframe_0.reshape((tframe_0.shape[0],tframe_0.shape[1],1)))
-        testrate=0.1
-        length = np.array([10670146,7050413,13645126,5311110,13410518])
-        length = (length / 44100*60)
-        test = length*testrate
-        left = length.cumsum() - test
-        right = length.cumsum()
-        left = left.astype(int)
-        right = right.astype(int)
-        test_lips,train_lips,test_tongue,train_tongue,test_lsf,train_lsf = [],[],[],[],[],[]
-        for i in range(len(left)):
-            test_lips.extend(lips[left[i]:right[i]])
-            test_tongue.extend(tongue[left[i]:right[i]])
-            test_lsf.extend(lsf[left[i]:right[i]])
- 
-        for i in range(len(left)):
-            if i == 0:
-                start = 0
-            else:
-                start = right[i-1]
-            train_lips.extend(lips[start:left[i]])
-            train_tongue.extend(tongue[start:left[i]])
-            train_lsf.extend(lsf[start:left[i]])
-        train_lips = np.array(train_lips,dtype=int)
-        train_tongue = np.array(train_tongue,dtype=int)
-        train_lsf = np.array(train_lsf)
-        test_lips = np.array(test_lips,dtype=int)
-        test_tongue = np.array(test_tongue,dtype=int)
-        test_lsf = np.array(test_lsf)
-        print(test_lsf)
-        f1 = open("../out/train_tongue_01.pkl","wb")
-        f2 = open("../out/train_lips_01.pkl","wb")
-        f3 = open("../out/train_lsf_01.pkl","wb")
-        f4 = open("../out/test_tongue_01.pkl","wb")
-        f5 = open("../out/test_lips_01.pkl","wb")
-        f6 = open("../out/test_lsf_01.pkl","wb")
-        pickle.dump(train_tongue,f1)
-        pickle.dump(train_lips,f2)
-        pickle.dump(train_lsf,f3)
-        pickle.dump(test_tongue,f4)
-        pickle.dump(test_lips,f5)
-        pickle.dump(test_lsf,f6)   
-        f1.close()
-        f2.close()
-        f3.close()
-        f4.close()
-        f5.close()
-        f6.close()
-        
-    return train_tongue,train_lips,train_lsf,test_tongue,test_lips,test_lsf
-
-def keras_train(classification=0,order=12,multi_task=True):
-    train_tongue,train_lips,train_lsf,test_tongue,test_lips,test_lsf = load_dataset()
+def target_preprocessing(train_lsf,test_lsf,classification,order=12):
     train_ys = []
     test_ys = []
     if classification > 0:
-        
         for i in range(order):
             tr_i_max = train_lsf[:,i].max()
             tr_i_min = train_lsf[:,i].min()
@@ -462,10 +422,8 @@ def keras_train(classification=0,order=12,multi_task=True):
         for i in range(order):
             train_ys.append(train_lsf[:,i][:,np.newaxis])
             test_ys.append(test_lsf[:,i][:,np.newaxis])
-    
-    model = cnn_model_keras(classification= classification,multi_task = multi_task)
-    #model = cnn_model_deep_keras()
-    optimizer=tf.keras.optimizers.Adam(lr = 0.0001)
+    return train_ys,test_ys
+def model_compile(model,optimizer,classification,multi_task=True):
     if classification > 0:
         if multi_task:
             loss = {'pred_lsf%d' % i: "categorical_crossentropy" for i in range(12)}
@@ -483,37 +441,56 @@ def keras_train(classification=0,order=12,multi_task=True):
                           metrics=["mse"])
         else:
             model.compile(optimizer=optimizer,loss='mse',metrics=['mse'])
-    earlystop = tf.keras.callbacks.EarlyStopping(monitor='val_loss',patience=5,mode='min')
+
+def measure(ytrue,ypred,train_lsf):  
+
+    if classification > 0:
+        predict_lsf = []
+        for i in range(12):
+            predict_iter = predict[i].argmax(axis=1)
+            tr_i_max = train_lsf[:,i].max()
+            tr_i_min = train_lsf[:,i].min()
+            predict_n =  ((predict_iter +0.5) / classification)*(tr_i_max - tr_i_min) + tr_i_min 
+            predict_lsf.append(predict_n)
+        predict_lsf = np.array(predict_lsf)
+        predict_lsf = predict_lsf.transpose()
+        _,_,sd,is16sd = spectral_distortion(predict_lsf,test_lsf,512,6,200)
+        print("sd %.3f is16sd %.3f" % (sd,is16sd))    
+    else:            
+        predict = [val.flatten() for val in predict]
+        predict = np.array(predict)
+        predict = predict.transpose()
+        predict[predict>3.1415926]=3.1415926
+        predict[predict<0]=0  
+        _,_,sd,is16sd = spectral_distortion(predict,test_lsf,512,6,200)
+        print("sd %.3f is16sd %.3f" % (sd,is16sd))
+    return sd, is16sd
+
+def keras_train(classification=0,order=12,multi_task=True):
     
+    #load data
+    train_tongue,train_lips,train_lsf,test_tongue,test_lips,test_lsf = load_dataset()
+    #preprocessing
+    train_ys, test_ys = target_preprocessing(train_lsf,test_lsf,classification)
+    #load model 
+    model = cnn_model_keras(classification= classification,multi_task = multi_task)
+    print(model.summary())
+    #load optimizer
+    optimizer=tf.keras.optimizers.Adam(lr = 0.0001)
+    #compile
+    model_compile(model,optimizer,classification,multi_task)
+    
+    earlystop = tf.keras.callbacks.EarlyStopping(monitor='val_loss',patience=5,mode='min')
+   
     if multi_task:
-        model.fit([train_tongue,train_lips],train_ys,validation_data=[[test_tongue,test_lips],test_ys],batch_size=512 ,epochs=10,shuffle=True)
+
+        model.fit([train_tongue,train_lips],train_ys,\
+                  validation_data=[[test_tongue,test_lips],test_ys],\
+                  batch_size=512 ,epochs=2,shuffle=True)
         predict = model.predict([test_tongue,test_lips],batch_size=512)
-        if classification > 0:
-            predict_lsf = []
-            for i in range(12):
-                predict_iter = predict[i].argmax(axis=1)
-                tr_i_max = train_lsf[:,i].max()
-                tr_i_min = train_lsf[:,i].min()
-                
-                predict_n =  ((predict_iter +0.5) / classification)*(tr_i_max - tr_i_min) + tr_i_min 
-                predict_lsf.append(predict_n)
-            predict_lsf = np.array(predict_lsf)
-            predict_lsf = predict_lsf.transpose()
-            print(predict_lsf)
-            print(predict_lsf.shape)
-            _,_,sd,is16sd = spectral_distortion(predict_lsf,test_lsf,512,6,200)
-            print("sd %.3f is16sd %.3f" % (sd,is16sd))    
-                              
-                              
-        else:
+        sd, is16sd = measure(test_lsf,predict,train_lsf)
+        
             
-            predict = [val.flatten() for val in predict]
-            predict = np.array(predict)
-            predict = predict.transpose()
-            predict[predict>3.1415926]=3.1415926
-            predict[predict<0]=0  
-            _,_,sd,is16sd = spectral_distortion(predict,test_lsf,512,6,200)
-            print("sd %.3f is16sd %.3f" % (sd,is16sd))
     else:
         model.fit([train_tongue,train_lips],train_ys[0],validation_data=[[test_tongue,test_lips],test_ys[0]],batch_size=512 ,epochs=2,shuffle=True)
  
@@ -683,15 +660,7 @@ def train():
 
 
 if __name__ == "__main__":
-#     wave_data, nchannels, sampwidth, framerate, nframes = \
-#     wavereader("..\data\Songs_Audio\MICRO_RecFile_1_20140523_184341_Micro_EGG_Sound_Capture_monoOutput1.wav")
-#     print( nchannels, sampwidth, framerate, nframes)
-#     print(wave_data)
-    #musicdata_wavereader()
+
 
     keras_train(classification=100,multi_task=1)
 
-
-#     lpcfilter = lpc.nautocor([1, -2, 3, -4, -3, 2, -3, 2, 1], order=3)
-#     reproduct = lpcfilter([1, -2, 3, -4, -3, 2, -3, 2, 1])
-#     print(list(reproduct))

@@ -3,7 +3,7 @@ import numpy as np
 import wave 
 import os
 import scipy.signal as spsig
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 from spectrum import linear_prediction as lpd
 from audiolazy import lpc
 import pickle 

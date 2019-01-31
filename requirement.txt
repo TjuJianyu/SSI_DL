@@ -1,0 +1,6 @@
+scipy==1.2.0
+spectrum==0.7.5
+opencv_python==4.0.0.21
+audiolazy==0.6
+tqdm==4.30.0
+
