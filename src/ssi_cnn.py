@@ -2,6 +2,9 @@ print('start')
 import wave
 import numpy as np
 from spectrum import linear_prediction as lpd
+
+
+#from tensorflow.keras.regularizers import l1,l2,l1_l2i
 import tensorflow as tf
 import cv2
 from audiolazy import lpc
@@ -81,7 +84,7 @@ def load_dataset():
         test_tongue = pickle.load(f4)
         test_lips = pickle.load(f5)
         test_lsf = pickle.load(f6)
-
+    
     else:
         f = open("../out/test_lsf/lsf.pkl","rb")
         lsf = pickle.load(f)
@@ -339,35 +342,125 @@ def spectral_distortion(lsf_true,lsf_pred,N,n0,n1):
     return SD,IS16SD, sum(SD) *1.0 / len(SD),sum(IS16SD)*1.0/len(IS16SD)
 
 
-def cnn_model_keras(classification=0,multi_task=True):
-    lips_inputs = tf.keras.Input(shape=(42,50,1))
-    tongue_inputs = tf.keras.Input(shape=(42,50,1))
+def cnn_model_keras(conv3d=False,classification=0,multi_task=True,lw1=1e-8):
     
-    layer = tf.keras.layers.Conv2D(filters=16,kernel_size=(5,5),\
-                                   padding='same',activation=tf.nn.relu)(lips_inputs)
-    layer = tf.keras.layers.MaxPool2D(pool_size=(2,2),padding='same')(layer)
-    layer = tf.keras.layers.BatchNormalization(axis=1)(layer)
-    
+    if conv3d:
+        lips_inputs = tf.keras.Input(shape=(8,42,50,1))
+        tongue_inputs = tf.keras.Input(shape=(8,42,50,1))
+        
+        layer = tf.keras.layers.Conv3D(filters=16,kernel_size=(5,5,4),kernel_regularizer=tf.keras.regularizers.l1(lw1),\
+                                       padding='same',activation=tf.nn.relu)(lips_inputs)
+        layer = tf.keras.layers.MaxPool3D(pool_size=(2,2,2),padding='same')(layer)
+        layer = tf.keras.layers.BatchNormalization(axis=1)(layer)
+        
+        layer = tf.keras.layers.Conv3D(filters=32,kernel_size=(3,3,2),kernel_regularizer=tf.keras.regularizers.l1(lw1),\
+                                       padding='same',activation=tf.nn.relu)(layer)
+        layer = tf.keras.layers.MaxPool3D(pool_size=(2,2,2),padding='same')(layer)
+        layer = tf.keras.layers.BatchNormalization(axis=1)(layer)
+        
+        layer = tf.keras.layers.Conv3D(filters=64,kernel_size=(3,3,2),kernel_regularizer=tf.keras.regularizers.l1(lw1),\
+                                       padding='same',activation=tf.nn.relu)(layer)
+        layer = tf.keras.layers.MaxPool3D(pool_size=(2,2,2),padding='same')(layer)
+        layer = tf.keras.layers.BatchNormalization(axis=1)(layer)
+        
+        layer = tf.keras.layers.Conv3D(filters=128,kernel_size=(3,3,2),kernel_regularizer=tf.keras.regularizers.l1(lw1),\
+                                       padding='same',activation=tf.nn.relu)(layer)
+        layer = tf.keras.layers.MaxPool3D(pool_size=(2,2,2),padding='same')(layer)
+        layer = tf.keras.layers.BatchNormalization(axis=1)(layer)
+        
+        lips = tf.keras.layers.Flatten()(layer)
+        
+        layer = tf.keras.layers.Conv3D(filters=16,kernel_size=(5,5,4),kernel_regularizer=tf.keras.regularizers.l1(lw1),\
+                                       padding='same',activation=tf.nn.relu)(tongue_inputs)
+        layer = tf.keras.layers.MaxPool3D(pool_size=(2,2,2),padding='same')(layer)
+        layer = tf.keras.layers.BatchNormalization(axis=1)(layer)
 
-    lips = tf.keras.layers.Flatten()(layer)
-    
-    
-    layer = tf.keras.layers.Conv2D(filters=16,kernel_size=(5,5),\
-                                   padding='same',activation=tf.nn.relu)(tongue_inputs)
-    layer = tf.keras.layers.MaxPool2D(pool_size=(2,2),padding='same')(layer)
-    layer = tf.keras.layers.BatchNormalization(axis=1)(layer)
+        layer = tf.keras.layers.Conv3D(filters=32,kernel_size=(3,3,2),kernel_regularizer=tf.keras.regularizers.l1(lw1),\
+                                       padding='same',activation=tf.nn.relu)(layer)
+        layer = tf.keras.layers.MaxPool3D(pool_size=(2,2,2),padding='same')(layer)
+        layer = tf.keras.layers.BatchNormalization(axis=1)(layer)
 
-    tongue = tf.keras.layers.Flatten()(layer)
-    
-    concat_lip_tog = tf.keras.layers.concatenate([lips,tongue])
+        layer = tf.keras.layers.Conv3D(filters=64,kernel_size=(3,3,2),kernel_regularizer=tf.keras.regularizers.l1(lw1),\
+                                       padding='same',activation=tf.nn.relu)(layer)
+        layer = tf.keras.layers.MaxPool3D(pool_size=(2,2,2),padding='same')(layer)
+        layer = tf.keras.layers.BatchNormalization(axis=1)(layer)
+
+        layer = tf.keras.layers.Conv3D(filters=128,kernel_size=(3,3,2),kernel_regularizer=tf.keras.regularizers.l1(lw1),\
+                                       padding='same',activation=tf.nn.relu)(layer)
+        layer = tf.keras.layers.MaxPool3D(pool_size=(2,2,2),padding='same')(layer)
+        layer = tf.keras.layers.BatchNormalization(axis=1)(layer)
+        
+        tongue = tf.keras.layers.Flatten()(layer)
+        
+        
+        concat_lip_tog = tf.keras.layers.concatenate([lips,tongue])
+        concat_lip_tog = tf.keras.layers.Dense(1000, activation = tf.nn.relu,\
+                                               kernel_regularizer=tf.keras.regularizers.l1(1e-4),\
+                                               name='fc')(concat_lip_tog)
+
+    else:
+        lips_inputs = tf.keras.Input(shape=(42,50,1),name='lips')
+        tongue_inputs = tf.keras.Input(shape=(42,50,1),name='tongue')
+        layer = tf.keras.layers.Conv2D(filters=16,kernel_size=(5,5),kernel_regularizer=tf.keras.regularizers.l1(lw1),\
+                                       padding='same',activation=tf.nn.relu)(lips_inputs)
+        layer = tf.keras.layers.MaxPool2D(pool_size=(2,2),padding='same')(layer)
+        layer = tf.keras.layers.BatchNormalization(axis=1)(layer)
+
+        layer = tf.keras.layers.Conv2D(filters=32,kernel_size=(5,5),kernel_regularizer=tf.keras.regularizers.l1(lw1),\
+                                       padding='same',activation=tf.nn.relu)(layer)
+        layer = tf.keras.layers.MaxPool2D(pool_size=(2,2),padding='same')(layer)
+        layer = tf.keras.layers.BatchNormalization(axis=1)(layer)
+
+        layer = tf.keras.layers.Conv2D(filters=64,kernel_size=(5,5),kernel_regularizer=tf.keras.regularizers.l1(lw1),\
+                                       padding='same',activation=tf.nn.relu)(layer)
+        layer = tf.keras.layers.MaxPool2D(pool_size=(2,2),padding='same')(layer)
+        layer = tf.keras.layers.BatchNormalization(axis=1)(layer)
+        
+        layer = tf.keras.layers.Conv2D(filters=128,kernel_size=(5,5),kernel_regularizer=tf.keras.regularizers.l1(lw1),\
+                                       padding='same',activation=tf.nn.relu)(layer)
+        layer = tf.keras.layers.MaxPool2D(pool_size=(2,2),padding='same')(layer)
+        layer = tf.keras.layers.BatchNormalization(axis=1)(layer)
+        
+        lips = tf.keras.layers.Flatten()(layer)
+
+
+        layer = tf.keras.layers.Conv2D(filters=16,kernel_size=(5,5),kernel_regularizer=tf.keras.regularizers.l1(lw1),\
+                                       padding='same',activation=tf.nn.relu)(tongue_inputs)
+        layer = tf.keras.layers.MaxPool2D(pool_size=(2,2),padding='same')(layer)
+        layer = tf.keras.layers.BatchNormalization(axis=1)(layer)
+
+        layer = tf.keras.layers.Conv2D(filters=32,kernel_size=(5,5),kernel_regularizer=tf.keras.regularizers.l1(lw1),\
+                                       padding='same',activation=tf.nn.relu)(layer)
+        layer = tf.keras.layers.MaxPool2D(pool_size=(2,2),padding='same')(layer)
+        layer = tf.keras.layers.BatchNormalization(axis=1)(layer)
+        
+        layer = tf.keras.layers.Conv2D(filters=64,kernel_size=(5,5),kernel_regularizer=tf.keras.regularizers.l1(lw1),\
+                                       padding='same',activation=tf.nn.relu)(layer)
+        layer = tf.keras.layers.MaxPool2D(pool_size=(2,2),padding='same')(layer)
+        layer = tf.keras.layers.BatchNormalization(axis=1)(layer)
+        
+        layer = tf.keras.layers.Conv2D(filters=128,kernel_size=(5,5),kernel_regularizer=tf.keras.regularizers.l1(lw1),\
+                                       padding='same',activation=tf.nn.relu)(layer)
+        layer = tf.keras.layers.MaxPool2D(pool_size=(2,2),padding='same')(layer)
+        layer = tf.keras.layers.BatchNormalization(axis=1)(layer)
+        
+        
+        tongue = tf.keras.layers.Flatten()(layer)
+
+        concat_lip_tog = tf.keras.layers.concatenate([lips,tongue])
+        concat_lip_tog = tf.keras.layers.Dense(1000, activation = tf.nn.relu,\
+                                               kernel_regularizer=tf.keras.regularizers.l1(1e-4),\
+                                               name='fc')(concat_lip_tog)
     
     if classification > 1:
         if multi_task:
             pred = []
             for i in range(12):
-                #sub_pred = concat_lip_tog
-                sub_pred = tf.keras.layers.Dense(1000, activation = tf.nn.relu, \
-                                                 name='neck_each%i' % i)(concat_lip_tog)
+                sub_pred = concat_lip_tog
+                #sub_pred = tf.keras.layers.Dense(1000, activation = tf.nn.relu,  kernel_regularizer=tf.keras.regularizers.l1(lw1),\
+                #                                 name='neck_each%i' % i)(concat_lip_tog)
+                #sub_pred = tf.keras.layers.Dense(1000, activation = tf.nn.relu,  kernel_regularizer=tf.keras.regularizers.l1(lw1),\
+                #                                 name='neck2_each%i' % i)(concat_lip_tog)
                 
                 sub_pred = tf.keras.layers.Dense(classification, \
                                                  activation=tf.nn.softmax,\
@@ -376,6 +469,8 @@ def cnn_model_keras(classification=0,multi_task=True):
             model = tf.keras.Model(inputs =[lips_inputs,tongue_inputs], \
                                    outputs = pred)
         else:
+            sub_pred = tf.keras.layers.Dense(1000, activation = tf.nn.relu, \
+                                                 name='neck')(concat_lip_tog)
             pred = tf.keras.layers.Dense(classification, \
                                          activation=tf.nn.softmax)(concat_lip_tog)
             
@@ -386,7 +481,7 @@ def cnn_model_keras(classification=0,multi_task=True):
             pred = []
             for i in range(12):
                 sub_pred = tf.keras.layers.Dense(1000, activation = tf.nn.relu, \
-                                                 name='neck_each%i' % i)(concat_lip_tog)
+                                                 name='neck')(concat_lip_tog)
                 sub_pred = tf.keras.layers.Dense(1, \
                                                  activation=None,\
                                                  name='pred_lsf%d' % i)(sub_pred)
@@ -395,6 +490,8 @@ def cnn_model_keras(classification=0,multi_task=True):
                                    outputs = pred)        
             
         else:
+            sub_pred = tf.keras.layers.Dense(1000, activation = tf.nn.relu, \
+                                                 name='neck_each%i' % i)(concat_lip_tog)
             pred = tf.keras.layers.Dense(1,activation=None)(concat_lip_tog)
             model = tf.keras.Model(inputs = [lips_inputs,tongue_inputs],outputs = pred)
         
@@ -442,8 +539,9 @@ def model_compile(model,optimizer,classification,multi_task=True):
         else:
             model.compile(optimizer=optimizer,loss='mse',metrics=['mse'])
 
-def measure(ytrue,ypred,train_lsf):  
-
+def measure(ytrue,ypred,train_lsf,classification):  
+    predict = ypred
+    test_lsf = ytrue
     if classification > 0:
         predict_lsf = []
         for i in range(12):
@@ -465,35 +563,69 @@ def measure(ytrue,ypred,train_lsf):
         _,_,sd,is16sd = spectral_distortion(predict,test_lsf,512,6,200)
         print("sd %.3f is16sd %.3f" % (sd,is16sd))
     return sd, is16sd
+def data_preprocessing(train_tongue,train_lips,train_lsf,test_tongue,test_lips,test_lsf,steps=8):
+    data = []
+    for x in [train_tongue,train_lips,test_tongue,test_lips]:
+        subdata = []
+        for i in tqdm(range(len(x))):
+            if (i-int(steps/2) >= 0) and (i+steps-int(steps/2) <= len(x)):
+                subdata.append(x[i-int(steps/2):i+steps-int(steps/2)])
+        data.append(np.array(subdata))
+    for x in [train_lsf,test_lsf]:
+        subdata = []
+        for i in range(len(x)):
+            if (i-int(steps/2) >= 0) and (i+steps-int(steps/2) <= len(x)):
+                subdata.append(x[i])
+        data.append(np.array(subdata))
+        
+    return data[0],data[1],data[4],data[2],data[3],data[5]
 
-def keras_train(classification=0,order=12,multi_task=True):
+def keras_train(conv3d=False,classification=0,order=12,multi_task=True):
     
     #load data
-    train_tongue,train_lips,train_lsf,test_tongue,test_lips,test_lsf = load_dataset()
-    #preprocessing
+    train_tongue,train_lips,train_lsf,test_tongue,test_lips,test_lsf = load_dataset()   
+    
+    #data preprocessing
+    if conv3d:
+        train_tongue,train_lips,train_lsf,test_tongue,test_lips,test_lsf = \
+        data_preprocessing(train_tongue,train_lips,train_lsf,test_tongue,test_lips,test_lsf)
+
+    #target preprocessing
     train_ys, test_ys = target_preprocessing(train_lsf,test_lsf,classification)
+    
     #load model 
-    model = cnn_model_keras(classification= classification,multi_task = multi_task)
+    model = cnn_model_keras(conv3d = conv3d,classification= classification,multi_task = multi_task)
     print(model.summary())
+    
     #load optimizer
     optimizer=tf.keras.optimizers.Adam(lr = 0.0001)
+    
     #compile
     model_compile(model,optimizer,classification,multi_task)
     
     earlystop = tf.keras.callbacks.EarlyStopping(monitor='val_loss',patience=5,mode='min')
    
     if multi_task:
-
-        model.fit([train_tongue,train_lips],train_ys,\
-                  validation_data=[[test_tongue,test_lips],test_ys],\
-                  batch_size=512 ,epochs=2,shuffle=True)
-        predict = model.predict([test_tongue,test_lips],batch_size=512)
-        sd, is16sd = measure(test_lsf,predict,train_lsf)
-        
+        for i in range(20):
+            
+            model.fit([train_tongue,train_lips],train_ys,\
+                      validation_data=[[test_tongue,test_lips],test_ys],\
+                      verbose=2,\
+                      batch_size=512,initial_epoch=i,epochs=i+1,shuffle=True)
+            predict = model.predict([test_tongue,test_lips],batch_size=512)
+            sd, is16sd = measure(test_lsf,predict,train_lsf,classification)
+            
             
     else:
-        model.fit([train_tongue,train_lips],train_ys[0],validation_data=[[test_tongue,test_lips],test_ys[0]],batch_size=512 ,epochs=2,shuffle=True)
- 
+        predict = []
+        for i in range(12):
+            
+            model.reset_states()
+            model.fit([train_tongue,train_lips],train_ys[i],validation_data=[[test_tongue,test_lips],test_ys[i]],batch_size=512 ,epochs=5,shuffle=True)
+            predict_iter = model.predict([test_tongue,test_lips],batch_size=512)
+            predict.append(predict_iter)
+        sd, is16sd = measure(test_lsf,predict,train_lsf,classification)
+        
 
 
 def simple_cnn_model(lip_l=42,lip_w=50,tog_l=42, tog_w=50,log = True):
@@ -662,5 +794,5 @@ def train():
 if __name__ == "__main__":
 
 
-    keras_train(classification=100,multi_task=1)
+    keras_train(conv3d=True,classification=100,multi_task=1)
 
