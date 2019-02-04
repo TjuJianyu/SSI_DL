@@ -12,6 +12,7 @@ import scipy.signal as spsig
 import os
 from tqdm import tqdm
 import pickle 
+import datetime
 from scipy import signal 
 import math
 import argparse
@@ -85,12 +86,12 @@ def load_dataset(IS16=False,reshape=False):
             for i in range(6-len(ran)):
                 ran = '0'+ran
             lframe_0 = cv2.imread(lips_fdir%ran,0)
-            lframe_0.resize(32,32)
+            #lframe_0.resize(32,32)
             lframe_0 = np.array(lframe_0)
             lips.append(lframe_0.reshape((lframe_0.shape[0],lframe_0.shape[1],1)))
 
             tframe_0 = cv2.imread(tong_fdir%ran,0)
-            tframe_0.resize(32,32)
+            #tframe_0.resize(32,32)
             tframe_0 = np.array(tframe_0)
             tongue.append(tframe_0.reshape((tframe_0.shape[0],tframe_0.shape[1],1)))
             
@@ -302,8 +303,8 @@ def spectral_distortion(lsf_true,lsf_pred,N,n0,n1):
 def cnn_model_keras(conv3d=False,classification=0,multi_task=True,lw1=1e-8):
     
     if conv3d:
-        lips_inputs = tf.keras.Input(shape=(8,32,32,1))
-        tongue_inputs = tf.keras.Input(shape=(8,32,32,1))
+        lips_inputs = tf.keras.Input(shape=(8,42,50,1))
+        tongue_inputs = tf.keras.Input(shape=(8,42,50,1))
         
         layer = tf.keras.layers.Conv3D(filters=16,kernel_size=(5,5,4),kernel_regularizer=tf.keras.regularizers.l1(lw1),\
                                        padding='same',activation=tf.nn.relu)(lips_inputs)
@@ -356,8 +357,8 @@ def cnn_model_keras(conv3d=False,classification=0,multi_task=True,lw1=1e-8):
                                                name='fc')(concat_lip_tog)
 
     else:
-        lips_inputs = tf.keras.Input(shape=(32,32,1),name='lips')
-        tongue_inputs = tf.keras.Input(shape=(32,32,1),name='tongue')
+        lips_inputs = tf.keras.Input(shape=(42,50,1),name='lips')
+        tongue_inputs = tf.keras.Input(shape=(42,50,1),name='tongue')
         layer = tf.keras.layers.Conv2D(filters=16,kernel_size=(5,5),kernel_regularizer=tf.keras.regularizers.l1(lw1),\
                                        padding='same',activation=tf.nn.relu)(lips_inputs)
         layer = tf.keras.layers.MaxPool2D(pool_size=(2,2),padding='same')(layer)
@@ -449,7 +450,7 @@ def cnn_model_keras(conv3d=False,classification=0,multi_task=True,lw1=1e-8):
             
         else:
             sub_pred = tf.keras.layers.Dense(1000, activation = tf.nn.relu, \
-                                                 name='neck_each%i' % i)(concat_lip_tog)
+                                                 name='neck')(concat_lip_tog)
             pred = tf.keras.layers.Dense(1,activation=None)(concat_lip_tog)
             model = tf.keras.Model(inputs = [lips_inputs,tongue_inputs],outputs = pred)
         
@@ -540,7 +541,7 @@ def data_preprocessing(train_tongue,train_lips,train_lsf,test_tongue,test_lips,t
     return data[0],data[1],data[4],data[2],data[3],data[5]
 
 def keras_train(conv3d=False,classification=0,order=12,multi_task=True,IS16=False):
-
+    print(multi_task)
     try:
         os.mkdir("../out/%s" % EXP_NAME)
     except:
@@ -566,31 +567,72 @@ def keras_train(conv3d=False,classification=0,order=12,multi_task=True,IS16=Fals
     #compile
     model_compile(model,optimizer,classification,multi_task)
     
-    earlystop = tf.keras.callbacks.EarlyStopping(monitor='val_loss',patience=5,mode='min')
-   
+    timenow = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
+    model_path = '../out/%s/bst_model.h5'%(EXP_NAME)
+    
+    model_checkpoint = tf.keras.callbacks.ModelCheckpoint(model_path, monitor='val_loss', save_best_only=True,\
+                                       save_weights_only=True)
+    earlystop = tf.keras.callbacks.EarlyStopping(monitor='val_loss',patience=1,mode='min')
+    
+    f_record = open("record.csv","a")
+    f_loss = open("../out/%s/loss.csv" % EXP_NAME,'a')
+    
     if multi_task:
-        for i in range(20):
-            model.fit([train_tongue,train_lips],train_ys,\
-                      validation_data=[[test_tongue,test_lips],test_ys],\
+        for i in range(100):
+            hist = model.fit([train_tongue,train_lips],train_ys,\
+                      validation_split=0.05,\
+                      #validation_data=[[test_tongue,test_lips],test_ys],\
                       verbose=2,\
-                      batch_size=512,initial_epoch=i,epochs=i+1,shuffle=True)
+                      batch_size=512,initial_epoch=i,epochs=i+1,shuffle=True,\
+                      callbacks=[earlystop,model_checkpoint])
+            
             predict = model.predict([test_tongue,test_lips],batch_size=512)
-            sd, is16sd,predict_lsf = measure(test_lsf,predict,train_lsf,classification)
-
+            sd, is16sd,predict_lsf = measure(test_lsf,predict,train_lsf,classification)    
+            f_loss.write("%.6f,%.6f,%.6f" % (hist.history['loss'][0],hist.history['val_loss'][0],is16sd))
+  
+        bst_epoch = np.argmax(hist.history['val_loss'])
+        trn_loss = hist.history['loss'][bst_epoch]
+        val_loss = hist.history['val_loss'][bst_epoch]
+        
+        model.load_weights(model_path)
+        predict = model.predict([test_tongue,test_lips],batch_size=512)
+        sd, is16sd,predict_lsf = measure(test_lsf,predict,train_lsf,classification)    
+        f = open("../out/%s/predict_is16sd%.3f.pkl" % (EXP_NAME,is16sd),'wb')
+        pickle.dump(predict_lsf,f)
+        f.close()   
+        
+        res = '%s,%s,%d,%d,%.6f,%.6f,%.6f,%s \n'%\
+        (timenow,'multi',EXP_NAME,classification,is16sd,bst_epoch+1,trn_loss,val_loss,str(is16))
+        f_record.write(res)
+        f_record.close()
+       
+        f_loss.close()
             
     else:
         predict = []
+        
         for i in range(12):
-            model.reset_states()
-            model.fit([train_tongue,train_lips],train_ys[i],validation_data=[[test_tongue,test_lips],test_ys[i]],batch_size=512 ,epochs=5,shuffle=True)
+            
+            model_path = '../out/%s/bst_lsf%d_model.h5'%(EXP_NAME,i)
+            model_checkpoint = tf.keras.callbacks.ModelCheckpoint(model_path, monitor='val_loss', save_best_only=True,\
+                                       save_weights_only=True)
+            model.fit([train_tongue,train_lips],train_ys[i],
+                      validation_split=0.05,
+                      #validation_data=[[test_tongue,test_lips],test_ys[i]],
+                      batch_size=512 ,epochs=50,shuffle=True,\
+                      callbacks=[earlystop,model_checkpoint])
+            model.load_weights(model_path)
             predict_iter = model.predict([test_tongue,test_lips],batch_size=512)
             predict.append(predict_iter)
-        sd, is16sd,predict_lsf = measure(test_lsf,predict,train_lsf,classification)
-        
-    f = open("../out/%s/predict_epoch%d_is16sd%.3f.pkl" % (EXP_NAME,i,is16sd),'wb')
-    pickle.dump(predict_lsf,f)
-    f.close()           
 
+        sd, is16sd,predict_lsf = measure(test_lsf,predict,train_lsf,classification)
+        f = open("../out/%s/predict_is16sd%.3f.pkl" % (EXP_NAME,is16sd),'wb')
+        pickle.dump(predict_lsf,f)
+        f.close()           
+        res = '%s,%s,%d,%d,%.6f,%.6f,%.6f,%s \n'%\
+        (timenow,'each',EXP_NAME,classification,is16sd,0,0,0,str(is16))
+        f_record.write(res)
+        f_record.close()
 
 
 
@@ -599,11 +641,11 @@ def keras_train(conv3d=False,classification=0,order=12,multi_task=True,IS16=Fals
 def parse_args():
     parser = argparse.ArgumentParser(description='Run.')
     parser.add_argument('--conv3d',type=bool,
-                        default=False,help='use 3d cnn model')
+                        default=True,help='use 3d cnn model')
     parser.add_argument('--classification',type=int,
                         default=100,help='count of classification target, 0 for regression')
     parser.add_argument('--multi_task',type=bool,
-                        default=True,help='12 lsf target as multi task or not')
+                        default=False,help='12 lsf target as multi task or not')
     parser.add_argument('--is16',type=bool,
                         default=True,help='use test dataset as is16')
     parser.add_argument('--name',type=str,
@@ -621,10 +663,10 @@ def parse_args():
 if __name__ == "__main__":
     
     args = parse_args()
-    
+    print(args.multi_task)
     keras_train(conv3d=args.conv3d,
                 classification=args.classification,
-                multi_task=1 if args.multi_task else 0,
+                multi_task=True,
                 IS16=args.is16)
     
     
