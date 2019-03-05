@@ -17,12 +17,26 @@ Run
 python image_preprocessing.py
 ```
 ### Audio downsample
-Downsample audio to 16khz and 10.025khz
+Downsample audio and EGG to 16khz and 10.025khz
 Run
 ```
-python downsample.py --srcpath ../data/MICRO_RecFile_1_20140523_184341_Micro_EGG_Sound_Capture_monoOutput1.wav --dstpath ../out/Song1.wav 
-python downsample.py --srcpath ../data/MICRO_RecFile_1_20140523_190633_Micro_EGG_Sound_Capture_monoOutput1.wav --dstpath ../out/Song2.wav 
-python downsample.py --srcpath ../data/MICRO_RecFile_1_20140523_192504_Micro_EGG_Sound_Capture_monoOutput1.wav --dstpath ../out/Song3.wav 
-python downsample.py --srcpath ../data/MICRO_RecFile_1_20140523_193153_Micro_EGG_Sound_Capture_monoOutput1.wav --dstpath ../out/Song4.wav 
-python downsample.py --srcpath ../data/MICRO_RecFile_1_20140523_193452_Micro_EGG_Sound_Capture_monoOutput1.wav --dstpath ../out/Song5.wav 
+python utils/downsample.py
+```
+## Train
+### Comparing different architectures (It can still gain better by furder parameter tuning. I only tune a little bit.)
+Run
+```
+python experiments_egg_audio.py
+```
+
+### generate activation function by EGG
+Run
+```
+python experiments_lips_tongues_lsf.py
+```
+
+### reconstruct audio by LSF and activation function
+Run 
+```
+
 ```
