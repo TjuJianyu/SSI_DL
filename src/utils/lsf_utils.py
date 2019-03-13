@@ -3,11 +3,9 @@ import numpy as np
 from spectrum import linear_prediction as lpd
 import time
 import random
-# from tensorflow.keras.regularizers import l1,l2,l1_l2i
 import tensorflow as tf
 import cv2
 from audiolazy import lpc
-# from matplotlib import pyplot as plt
 import scipy.signal as spsig
 import os
 from tqdm import tqdm
@@ -17,7 +15,98 @@ from scipy import signal
 import math
 import argparse
 import scipy.io as sio
+import soundfile as sf
+import heapq
+from scipy import optimize
+import wave
+import audioop
+import sys
+import os
+from scipy.stats import sem, t
+from scipy import mean
 
+pi = 3.1415926
+def test_func(x, a, b,c,d):
+    return a*np.sin((2*pi)/b * x+c*pi)  +d
+def test_func2(a, b, d):
+    def test_func(x, c):
+        return a * np.sin((2 * pi) / b * x + c * pi) + d
+
+    return test_func
+
+
+def to_square_wave(data, n=10, context=0.25):
+    softmax = sum(heapq.nlargest(n, data[int(len(data) * context):-int(len(data) * context)])) * 1.0 / n
+    softmin = sum(heapq.nsmallest(n, data[int(len(data) * context):-int(len(data) * context)])) * 1.0 / n
+    median = (softmax + softmin) / 2
+    square_data = np.copy(data)
+    square_data[data >= median] = 1
+    square_data[data < median] = -1
+
+    return square_data, softmax, softmin, median
+
+def wave_cyc(square_wave, real_wave, threshold=10):
+    data = np.copy(square_wave)
+
+    start = label = data[0]
+    stack = []
+    labels = []
+    count = 0
+    for val in data:
+        if val == label:
+            count += 1
+        else:
+            stack.append(count)
+            labels.append(label)
+            label = val
+            count = 1
+    stack.append(count)
+    labels.append(label)
+
+    total_index = 0
+    size = len(stack)
+    for i in range(size):
+        val = stack[i]
+        if i == 0:
+            total_index += val
+            continue
+        if val < threshold:
+            for j in range(total_index, total_index + val):
+                data[j] = labels[i - 1]
+                labels[i] = labels[i - 1]
+        total_index += val
+
+    start = label = data[0]
+    stack = []
+    labels = []
+    count = 0
+    for val in data:
+        if val == label:
+            count += 1
+        else:
+            stack.append(count)
+            labels.append(label)
+            label = val
+            count = 1
+    stack.append(count)
+    labels.append(label)
+
+    bound = []
+    start = 0
+    for i in range(len(stack)):
+        val = stack[i]
+        bound.append(real_wave[start:start + val].min() if labels[i] == -1 else real_wave[start:start + val].max())
+        data[start:start + val] = min(real_wave[start:start + val]) if labels[i] == -1 else max(
+            real_wave[start:start + val])
+        start += val
+
+    if len(stack) >= 4:
+        tmp_stack = stack[1:len(stack) - 1 if (len(stack) - 2) % 2 == 0 else len(stack) - 2]
+        cyc = sum(tmp_stack) * 1.0 / (len(tmp_stack) / 2)
+    else:
+        cyc = sum(stack) * 1.0 / (len(stack) / 2)
+
+    return data, bound, stack, cyc, (bound[int(len(bound) / 2) - 1], bound[int(len(bound) / 2)])
 
 def wavereader(f_path):
     f = wave.open(f_path, "rb")
@@ -27,7 +116,6 @@ def wavereader(f_path):
     f.close()
     wave_data = np.fromstring(str_data, dtype=np.short)
     return wave_data, nchannels, sampwidth, framerate, nframes
-
 
 def musicdata_wavereader(normalized=True):
     songs = ['184341', '190633', '192504', '193153', '193452']
@@ -66,6 +154,52 @@ def musicdata_wavereader(normalized=True):
 
     return wave_dataset, nchannels, sampwidth, framerate, totalnframes
 
+def loadeggsong(data_dir = '../out/',size = 16000 * 1.0/60):
+
+    wave_data = []
+    egg_data = []
+    for i in range(5):
+        f = open(data_dir + 'song%d.wav' % (i + 1), 'rb')
+        data, samplerate = sf.read(f, dtype='int16')
+        wave_data.extend(data.tolist()[:-int(size * 10)])
+        f = open(data_dir + 'egg%d.wav' % (i + 1), 'rb')
+        data, samplerate = sf.read(f, dtype='int16')
+        egg_data.extend(data.tolist()[:-int(size * 10)])
+
+    wave_data = np.array(wave_data, dtype='float32')
+    mean = wave_data.mean()
+    std = wave_data.std()
+    wave_data -= mean
+    wave_data /= std
+
+    egg_data = np.array(egg_data, dtype='float32')
+    mean = egg_data.mean()
+    std = egg_data.std()
+    egg_data -= mean
+    egg_data /= std
+    egg_data = np.concatenate([[0] * 30, egg_data[:-30]])
+
+    data = []
+    ydata = []
+    for i in range(int(len(wave_data) / size)):
+        instance = wave_data[int(i * size):int((i) * size) + int(size)]
+        ydata.append(instance)
+        egginstance = egg_data[int(i * size):int((i) * size) + int(size)]
+        data.append(egginstance)
+
+    data = np.array(data, dtype='float')
+    ydata = np.array(ydata, dtype='float')
+
+    # data = data.tolist()
+    # (len(data))
+    cnn = True
+
+    trainegg = np.concatenate([data[:25000], data[30000:]])
+    testegg = np.array(data[25000:30000])
+    trainsong = np.concatenate([ydata[:25000], ydata[30000:]])
+    testsong = np.array(ydata[25000:30000])
+
+    return trainegg,testegg,trainsong,testsong
 
 def load_dataset(path="../out/test_lsf/lsf_hamming_ds4.pkl", IS16=False, fakeIS16=False, reshape=False):
     print('loading...')
@@ -210,7 +344,6 @@ def u_law(x,u=255):
     val = np.array(x)
     return np.sign(val) * np.log1p(u*np.absolute(val)) / np.log1p(u)
 
-
 def simple_audio2lsf(audio_data, order):
     lpcfilter = lpc.nautocor(audio_data, order)
     reproduce = np.array(list(lpcfilter(frame)))
@@ -218,65 +351,12 @@ def simple_audio2lsf(audio_data, order):
     lsf = lpd.poly2lsf([lpcfilter[i] for i in range(order + 1)])
     return lsf
 
-
-import wave
-import audioop
-import sys
-import os
-from scipy.stats import sem, t
-from scipy import mean
-
-
 def confidenceinterval(data, confidence=0.95):
     n = len(data)
     m = mean(data)
     std_err = sem(data)
     h = std_err * t.ppf((1 + confidence) / 2, n - 1)
     return m, h
-
-
-def downsampleWav(src, dst, inrate=44100, outrate=16000, inchannels=1, outchannels=1):
-    if not os.path.exists(src):
-        print('Source not found!')
-        return False
-
-    if not os.path.exists(os.path.dirname(dst)):
-        os.makedirs(os.path.dirname(dst))
-
-    try:
-        s_read = wave.open(src, 'r')
-        s_write = wave.open(dst, 'w')
-    except:
-        print('Failed to open files!')
-        return False
-
-    n_frames = s_read.getnframes()
-    data = s_read.readframes(n_frames)
-
-    try:
-        converted = audioop.ratecv(data, 2, inchannels, inrate, outrate, None)
-        if outchannels == 1 & inchannels != 1:
-            converted[0] = audioop.tomono(converted[0], 2, 1, 0)
-    except:
-        print('Failed to downsample wav')
-        return False
-
-    try:
-        s_write.setparams((outchannels, 2, outrate, 0, 'NONE', 'Uncompressed'))
-        s_write.writeframes(converted[0])
-    except:
-        print('Failed to write wav')
-        return False
-
-    try:
-        s_read.close()
-        s_write.close()
-    except:
-        print('Failed to close wav files')
-        return False
-
-    return True
-
 
 def audio2lsf(audio_data, fps, order, hamming=False, \
               usefilter=True, frame_length=1 / 60, useGPU=False, bins=-1):
@@ -314,5 +394,4 @@ def audio2lsf(audio_data, fps, order, hamming=False, \
 
     return np.array(lsf), np.array(reproduce), error
 if __name__ == "__main__":
-    #audio2lsf()
-    downsampleWav()
+    pass
