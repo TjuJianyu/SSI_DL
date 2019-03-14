@@ -22,21 +22,26 @@ Run
 ```
 python utils/downsample.py
 ```
-## Train
-### Comparing different architectures (It can still gain better by furder parameter tuning. I only tune a little bit.)
+### Calculating LSF for original Audio
 Run
 ```
-python experiments_egg_audio.py
+python audio2lsf.py
 ```
 
-### generate activation function by EGG
+## 1. LSF predicting
+In this section, we want to predict LSF from lips and tongue.
+### Comparing different architectures (It can still gain better by furder parameter tuning. I only tune a little bit.)
+Run
 Run
 ```
 python experiments_lips_tongues_lsf.py
 ```
-
-### reconstruct audio by LSF and activation function
-Run 
+## 2. Reproducing Audio by EGG
+It is interesting to predict original audio from EGG.
+Run
 ```
 
-```
+
+## 3. F0 predicting
+
+
