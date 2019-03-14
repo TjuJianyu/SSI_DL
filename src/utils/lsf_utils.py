@@ -358,8 +358,68 @@ def confidenceinterval(data, confidence=0.95):
     h = std_err * t.ppf((1 + confidence) / 2, n - 1)
     return m, h
 
-def audio2lsf(audio_data, fps, order, hamming=False, \
-              usefilter=True, frame_length=1 / 60, useGPU=False, bins=-1):
+def mean_option_score(SD):
+    mos = 3.56 - 0.8 * SD + 0.04 * (SD ** 2)
+    dmos = mos - (3.56 - 0.8 * 1 + 0.04 * (1 ** 2))
+    return mos, dmos
+
+
+def spectral_distortion(lsf_true, lsf_pred, N, n0, n1):
+    SD = []
+    IS16SD = []
+    print(len(lsf_true))
+    print(len(lsf_pred))
+    for frameid in range(len(lsf_true)):
+        lpc_true = lpd.lsf2poly(lsf_true[frameid])
+        lpc_pred = lpd.lsf2poly(lsf_pred[frameid])
+
+        _, freqResponse_true = signal.freqz(b=1, a=lpc_true, worN=N)
+        _, freqResponse_pred = signal.freqz(b=1, a=lpc_pred, worN=N)
+
+        freq_th = freqResponse_true[n0 - 1:n1]
+        freq_pred = freqResponse_pred[n0 - 1:n1]
+
+        absoluteRadio = (freq_th.real ** 2 + freq_th.imag ** 2) ** 0.5 / (
+                    freq_pred.real ** 2 + freq_pred.imag ** 2) ** 0.5
+
+        logValue = np.log10(absoluteRadio ** 2)
+        bigsum = ((10 * logValue) ** 2).sum()
+        sd = math.sqrt(1.0 / (n1 - n0)) * bigsum
+        IS16sd = math.sqrt(1.0 / (n1 - n0) * bigsum)
+        SD.append(sd)
+        IS16SD.append(IS16sd)
+
+    return SD, IS16SD, sum(SD) * 1.0 / len(SD), sum(IS16SD) * 1.0 / len(IS16SD)
+
+
+def vocoder(lsf, activation, fs=16000, hamming=True, frame_length=1 / 60, overlap_percent=50):
+    exact_frame_length = fs * frame_length
+    signal_length = len(activation)
+    print(signal_length)
+    downsample_audio_data = np.hstack([np.array([0] * int(exact_frame_length / 2)) , activation, np.array([0] * int(exact_frame_length / 2))])
+    # reproduced = [0]*len(downsample_audio_data)
+    reproduced = []
+    for i in tqdm(range(int(signal_length / exact_frame_length))):
+        start_index = int(i * exact_frame_length) - int(exact_frame_length / 2) + int(exact_frame_length / 2)
+        stop_index = int((i + 1) * exact_frame_length) + int(exact_frame_length / 2) + int(exact_frame_length / 2)
+        if hamming:
+            frame = downsample_audio_data[start_index:stop_index] * spsig.hamming(stop_index - start_index)
+        else:
+            frame = downsample_audio_data[start_index:stop_index]
+        lsf_iter = lsf[i]
+        # print(lsf_iter)
+        lpcval = lpd.lsf2poly(lsf_iter)
+        # print(lpcval)
+        lpcfilter = audiolazy.ZFilter(lpcval.tolist())
+        reproduced_iter = list(lpcfilter(frame))
+
+        reproduced.extend(reproduced_iter[int(exact_frame_length / 2):-int(exact_frame_length / 2)])
+    return np.array(reproduced)
+
+
+# len(lsf)
+def audio2lsf(audio_data, fps, order, \
+              usefilter=True, frame_length=1 / 60,  bins=-1):
     if usefilter:
         downsample_audio_data = spsig.lfilter([1, -0.95], 1, audio_data)
 

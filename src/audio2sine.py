@@ -26,32 +26,14 @@ def main():
             smoothwave = pd.Series(wave).rolling(smoothstep,center=True).mean().values[int(smoothstep/2):int(-smoothstep/2)]
 
             square_data,softmax, softmin, median= to_square_wave(smoothwave)
-            # if len(square_data) ==0:
-            #     print(len(data) ,int((j+1 + context) * eachsize))
-            #     print(max(0,int((j - context)*eachsize)) , min(len(data) ,int((j+1 + context) * eachsize)))
-            #     print(wave)
-            #     print((max(bound) - min(bound)) / 2, cyc, sum(bound) / 2)
-            #     plt.plot(range(len(wave)),wave)
-            #     plt.plot(np.array(range(len(square_data)))+int(smoothstep/2),square_data)
-            #
-            #     #plt.plot(range(len(wave)),)
-            #     plt.show()
+
             _, _, _, cyc, bound = wave_cyc(square_data,smoothwave,threshold)
             record = cyc, sum(bound)/2, (max(bound) - min(bound))/2
             records.append(record)
 
             params, params_covariance = optimize.curve_fit(test_func2((max(bound) - min(bound)) / 2, cyc, sum(bound) / 2),
                                                            np.array(range(len(wave))), wave,p0=[0],maxfev = 10000)
-            # if j==492:
-            #
-            #     print((max(bound) - min(bound)) / 2, cyc, sum(bound) / 2)
-            #     plt.plot(range(len(wave)),wave)
-            #     plt.plot(np.array(range(len(square_data)))+int(smoothstep/2),square_data)
-            #
-            #     #plt.plot(range(len(wave)),)
-            #     plt.show()
-            # #print(params)
-            #     # print()
+
             fit_records.append([(max(bound) - min(bound)) / 2, cyc, params[0],sum(bound) / 2])
 
 

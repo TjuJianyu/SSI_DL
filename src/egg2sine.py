@@ -31,22 +31,10 @@ def main():
             _, _, _, cyc, bound = wave_cyc(square_data, wave)
             record = cyc, sum(bound)/2, (max(bound) - min(bound))/2
             records.append(record)
-            #print(cyc)
 
-
-            #params, params_covariance = optimize.curve_fit(test_func, range(len(wave)), wave,
-            #                                               p0=[(max(bound) - min(bound)) / 2, cyc, 0, sum(bound) / 2],maxfev=10000)
             params, params_covariance = optimize.curve_fit(test_func2((max(bound) - min(bound)) / 2, cyc, sum(bound) / 2),
                                                            np.array(range(len(wave))), wave,p0=[0],maxfev = 10000)
-            if j==492:
 
-                print((max(bound) - min(bound)) / 2, cyc, sum(bound) / 2)
-                plt.plot(range(len(wave)),wave)
-                plt.plot(range(len(wave)),square_data)
-                #plt.plot(range(len(wave)),)
-                plt.show()
-            #print(params)
-                print()
             fit_records.append([(max(bound) - min(bound)) / 2, cyc, params[0],sum(bound) / 2])
 
 

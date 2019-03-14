@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import pickle
 import os
-
+import argparse
 class egg_Model():
     def __init__(self,cnn=True,dropout=0.1,shape=[200,100,50],output_size=266,input_size=266,activation=tf.nn.relu,
                  strides=1,kernel_size = [12,12,6],filters =[4,8,16],pool_size=[4,4,2],pooltype='max',fromhidden=False,optimize=True ):
@@ -84,33 +84,38 @@ class egg_Model():
         if optimize:
             self.optimizer = tf.train.AdamOptimizer(0.0001).minimize(self.loss)
 
-def main():
+def main(inputtype,outdir = '../out/cnn_fzero2audio/'):
     size = int(16000 * 1.0/60)
-    outdir = '../../out/cnn_ae_songfeat/'
     if not os.path.isdir(outdir):
         os.mkdir(outdir)
+    data_dir = '../out/'
 
-    _, _, trainy, testy = loadeggsong('../../out/')
-
-    data_dir = '../../out/'
-
-    f = open(data_dir+'trainsongfeat_fit.pkl','rb')
-    trainegg = pickle.load(f)
-    f.close()
-
-    f = open(data_dir+'testsongfeat_fit.pkl','rb')
-    testegg = pickle.load(f)
-    f.close()
-
-
-    train = []
-    for val in trainegg:
-        train.append(test_func(range(size),val[0],val[1],val[2],val[3]))
-    test = []
-    for val in testegg:
-        test.append(test_func(range(size),val[0], val[1], val[2], val[3]))
-    train = np.array(train)
-    test = np.array(test)
+    trainegg, testegg, trainy, testy = loadeggsong('../out/')
+    if inputtype == 'egg':
+        train,test = trainegg,testegg
+    else:
+        if inputtype == 'f0song':
+            f = open(data_dir+'trainsongfeat_fit.pkl','rb')
+            trainegg = pickle.load(f)
+            f.close()
+            f = open(data_dir+'testsongfeat_fit.pkl','rb')
+            testegg = pickle.load(f)
+            f.close()
+        elif inputtype == 'f0egg':
+            f = open(data_dir + 'traineggfeat_fit.pkl', 'rb')
+            trainegg = pickle.load(f)
+            f.close()
+            f = open(data_dir + 'testeggfeat_fit.pkl', 'rb')
+            testegg = pickle.load(f)
+            f.close()
+        train = []
+        for val in trainegg:
+            train.append(test_func(range(size),val[0],val[1],val[2],val[3]))
+        test = []
+        for val in testegg:
+            test.append(test_func(range(size),val[0], val[1], val[2], val[3]))
+        train = np.array(train)
+        test = np.array(test)
 
     cnn =True
     if cnn:
@@ -130,23 +135,15 @@ def main():
         for i in range(1000000):
 
             batchid = np.random.randint(0, len(train), batch_size)
-            #print(batchid)
             batch_x = train[batchid]
             batch_y = trainy[batchid]
-            #print(batch_y.shape)
-            #print(batch_x.shape)
             sess.run(model.optimizer,feed_dict={model.input:batch_x,model.output:batch_y})
             if (i+1) % 1000 == 0:
                 trainloss = sess.run(model.loss,feed_dict={model.input:batch_x,model.output:batch_y})
                 testloss = sess.run(model.loss,feed_dict={model.input:test,model.output:testy})
                 print("%d,trainloss %.6f, testloss %.6f" % (i+1,trainloss,testloss))
                 pred = sess.run(model.decode,feed_dict={model.input:test})
-
-
                 print(pred.max(),pred.min())
-                #f = open(outdir+'ae_test_%d.pkl' % (i+1),'wb')
-                #pickle.dump(pred,f)
-                #f.close()
                 sf.write(outdir+'ae_test_%d.wav' % (i+1),pred.flatten(),16000,subtype='FLOAT')
 
                 plt.plot(range(len(test.flatten())),test.flatten(),label='origin',linewidth=0.01)
@@ -158,5 +155,16 @@ def main():
                 plt.close()
                 #plt.show()
 
+def parse_args():
+    parser = argparse.ArgumentParser(description='Run.')
+
+    parser.add_argument('--inputtype', type=str,
+                        default='f0song', help='from original egg or amplitude, cycle, phase, \
+                        vertical shift from egg or amplitude, cycle, phase, \
+                        vertical shift from audio to predict original audio. \
+                        "egg","f0egg","f0song", by default we choose "f0song".')
+    return parser.parse_args()
 
 if __name__ == "__main__":
+    args = parse_args()
+    main(args.inputtype)
