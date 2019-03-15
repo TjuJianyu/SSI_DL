@@ -199,12 +199,18 @@ def keras_train_pred_freq(name = 'lipstongue2Fzero_',egg=False,audioonly=True,\
             predict.append(predict_iter)
 
         bst_epoch -= 1
+        for i in range(order):
 
+            model.load_weights('../out/%s/bst_lsf%d_model.h5' % (EXP_NAME,i))
+            pred = model.predict([test_tongue, test_lips], batch_size=512)
+            f = open('../out/%s/lsf%d.pkl' % (EXP_NAME,i), 'wb')
+            pickle.dump(pred,f)
+            f.close()
 
-        sd, is16sd, predict_lsf = measure(test_lsf, predict, train_lsf, classification,order=order)
-        f = open("../out/%s/predict_is16sd%.3f.pkl" % (EXP_NAME, is16sd), 'wb')
-        pickle.dump(predict_lsf, f)
-        f.close()
+        # sd, is16sd, predict_lsf = measure(test_lsf, predict, train_lsf, classification,order=order)
+        # f = open("../out/%s/predict_is16sd%.3f.pkl" % (EXP_NAME, is16sd), 'wb')
+        # pickle.dump(predict_lsf, f)
+        # f.close()
     res = '%s,%s,%s,%s,%s,%d,%.6f,%.6f,%s,%s \n' % (timenow, 'multi', EXP_NAME, str(classification   ), str(is16sd), bst_epoch + 1, trn_loss, val_loss, str(IS16), name)
     f_record.write(res)
     f_record.close()
@@ -214,5 +220,8 @@ def keras_train_pred_freq(name = 'lipstongue2Fzero_',egg=False,audioonly=True,\
 if __name__ == "__main__":
 
     #keras_train_pred_freq(epochs=200,classification=0,AE=False,name='lipstongue2Fzero_init',stepbystep=True,multi_task=True)
-    keras_train_pred_freq(epochs=200, classification=0, AE=True, name='lipstongue2Fzero_AE', stepbystep=True,
-                          multi_task=True)
+
+    #keras_train_pred_freq(epochs=200, classification=0, AE=True, name='lipstongue2Fzero_AE', stepbystep=True, multi_task=True)
+
+    keras_train_pred_freq(epochs=200, classification=0, AE=False, name='lipstongue2Fzero_traineach', stepbystep=False,
+                          multi_task=False)
