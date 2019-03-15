@@ -20,12 +20,11 @@ import argparse
 import scipy.io as sio
 from utils.lsf_utils import *
 import pandas as pd
+from sklearn.metrics import log_loss
+def keras_train_pred_uv(name = 'lipstongue2uv_',egg=False,\
+                          path="../out/test_lsf/lsf_hamming_16kHZ.pkl",classification=2, \
+                          IS16=True,multi_task=True, optimizer='adam', lr=0.0001, AE=True,epochs=30,order=1,stepbystep=False):
 
-def keras_train_pred_freq(name = 'lipstongue2Fzero_',egg=False,audioonly=True,\
-                          path="../out/test_lsf/lsf_hamming_16kHZ.pkl",classification=0, \
-                          IS16=True,multi_task=True, optimizer='adam', lr=0.0001, AE=False,epochs=30,order=3,stepbystep=False):
-    print(optimizer)
-    print(multi_task)
     EXP_NAME = name
     try:
         os.mkdir("../out/%s" % EXP_NAME)
@@ -58,52 +57,27 @@ def keras_train_pred_freq(name = 'lipstongue2Fzero_',egg=False,audioonly=True,\
     trainegg = trainegg[:,[0,1,3]]
     testegg = testegg[:,[0,1,3]]
 
-    if audioonly:
+    train_y = np.array([1]*len(trainegg))
+    test_y = np.array([1]*len(testegg))
 
-        tmpdata = pd.DataFrame(trainegg)
-        tmpdata = tmpdata[tmpdata[0] > 0.6]
-        tmpdata = tmpdata[tmpdata[0] < 1.9]
-        tmpdata = tmpdata[tmpdata[1] > 60]
-        tmpdata = tmpdata[tmpdata[1] < 173]
-        train_tongue = train_tongue[tmpdata.index.tolist()]
-        train_lips   = train_lips[tmpdata.index.tolist()]
-        trainegg = trainegg [tmpdata.index.tolist()]
 
-        tmpdata = pd.DataFrame(testegg)
-        tmpdata = tmpdata[tmpdata[0] > 0.6]
-        tmpdata = tmpdata[tmpdata[0] < 1.9]
-        tmpdata = tmpdata[tmpdata[1] > 60]
-        tmpdata = tmpdata[tmpdata[1] < 173]
-        test_tongue = test_tongue[tmpdata.index.tolist()]
-        test_lips = test_lips[tmpdata.index.tolist()]
-        testegg = testegg[tmpdata.index.tolist()]
+    tmpdata = pd.DataFrame(trainegg)
+    tmpdata = tmpdata[tmpdata[0] > 0.6]
+    tmpdata = tmpdata[tmpdata[0] < 1.9]
+    tmpdata = tmpdata[tmpdata[1] > 60]
+    tmpdata = tmpdata[tmpdata[1] < 173]
+    train_y[tmpdata.index.tolist()] = 0
 
-        mean = trainegg.mean(axis=0)
-        std = trainegg.std(axis=0)
-        print(mean,std)
-        print(trainegg.shape)
-        print(testegg.shape)
-    else:
+    tmpdata = pd.DataFrame(testegg)
+    tmpdata = tmpdata[tmpdata[0] > 0.6]
+    tmpdata = tmpdata[tmpdata[0] < 1.9]
+    tmpdata = tmpdata[tmpdata[1] > 60]
+    tmpdata = tmpdata[tmpdata[1] < 173]
+    test_y[tmpdata.index.tolist()] = 0
 
-        unsineval = [0.6 - (1.9 - 0.6) / (classification - 1), 60. - (173. - 60.) / (classification - 1),
-                     -1. - (1. - (-1)) / (classification - 1)]
-        trainegg[trainegg[:, 0] < 0.6] = unsineval
-        trainegg[trainegg[:, 0] > 1.9] = unsineval
-        trainegg[trainegg[:, 1] < 60] = unsineval
-        trainegg[trainegg[:, 1] > 173] = unsineval
-        trainegg[trainegg[:, 2] < -1] = unsineval
-        trainegg[trainegg[:, 2] > 1] = unsineval
-
-        testegg[testegg[:, 0] < 0.6] = unsineval
-        testegg[testegg[:, 0] > 1.9] = unsineval
-        testegg[testegg[:, 1] < 60] = unsineval
-        testegg[testegg[:, 1] > 173] = unsineval
-        testegg[testegg[:, 2] < -1] = unsineval
-        testegg[testegg[:, 2] > 1] = unsineval
 
     # target preprocessing
-    train_ys, test_ys = target_preprocessing(trainegg, testegg, classification,order=order)
-
+    train_ys, test_ys = target_preprocessing(train_y[:,np.newaxis], test_y[:,np.newaxis], classification,order=order)
 
     # load model
     model = cnn_model_keras(conv3d=False, classification=classification, multi_task=multi_task, AE=AE,order=order)
@@ -164,13 +138,15 @@ def keras_train_pred_freq(name = 'lipstongue2Fzero_',egg=False,audioonly=True,\
 
             model.load_weights(model_path)
             predict = model.predict([test_tongue, test_lips], batch_size=512)
+
             f = open("../out/%s/predict.pkl" % (EXP_NAME), 'wb')
             pickle.dump(predict, f)
             f.close()
             f = open("../out/%s/predict_index.pkl" % (EXP_NAME), 'wb')
             pickle.dump(tmpdata.index.tolist(), f)
             f.close()
-
+            logloss = log_loss(test_y,predict[:,1])
+            print(logloss)
 
 
     else:
@@ -214,5 +190,5 @@ def keras_train_pred_freq(name = 'lipstongue2Fzero_',egg=False,audioonly=True,\
 if __name__ == "__main__":
 
     #keras_train_pred_freq(epochs=200,classification=0,AE=False,name='lipstongue2Fzero_init',stepbystep=True,multi_task=True)
-    keras_train_pred_freq(epochs=200, classification=0, AE=True, name='lipstongue2Fzero_AE', stepbystep=True,
-                          multi_task=True)
+    keras_train_pred_uv(epochs=200, AE=False, name='lipstongue2uv',
+                          multi_task=True,order=1)

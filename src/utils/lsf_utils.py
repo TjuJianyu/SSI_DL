@@ -201,7 +201,7 @@ def loadeggsong(data_dir = '../out/',size = 16000 * 1.0/60):
 
     return trainegg,testegg,trainsong,testsong
 
-def load_dataset(path="../out/test_lsf/lsf_hamming_ds4.pkl", IS16=False, fakeIS16=False, reshape=False):
+def load_dataset(path="../out/test_lsf/lsf_hamming_16kHZ.pkl", IS16=False, fakeIS16=False, reshape=False):
     print('loading...')
     if IS16:
         f = open(path, "rb")

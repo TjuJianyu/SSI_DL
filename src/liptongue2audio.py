@@ -72,7 +72,8 @@ def endtoend_model_keras(lw1=1e-7, dropout=0.2):
 
     return model
 
-def endtoend_train():
+def endtoend_train(name='endtoend_train'):
+    EXP_NAME = name
     size = 16000 * 1.0 / 60
     wave_data = []
     for i in range(5):

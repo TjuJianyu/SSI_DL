@@ -303,6 +303,7 @@ def target_preprocessing(train_lsf, test_lsf, classification, order=12):
 
 
 def model_compile(model, optimizer, classification, multi_task=True, AE=False,order=12):
+
     if classification > 0:
         if multi_task:
 
@@ -328,12 +329,20 @@ def model_compile(model, optimizer, classification, multi_task=True, AE=False,or
                           metrics=["categorical_crossentropy"])
     else:
         if multi_task:
-
             loss = {'pred_lsf%d' % i: "mse" for i in range(order)}
+            loss_weights = {'pred_lsf%d' % i: 1 for i in range(order)}
+
+            if AE:
+                loss['tongue_decode'] = "mse"
+                loss['lips_decode'] = "mse"
+                loss_weights['tongue_decode'] = 1 / 100
+                loss_weights['lips_decode'] = 1 / 100
+
             model.compile(optimizer=optimizer,
                           loss=loss,
                           metrics=["mse"])
         else:
+
             model.compile(optimizer=optimizer, loss='mse', metrics=['mse'])
 
 
