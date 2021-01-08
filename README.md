@@ -1,47 +1,87 @@
 # SSI_DL
-silent speech interface by deep learning 
-This is the code for silent speech interface paper "xxx".
+
+This is the code for silent speech interface paper "Creating Song from Lip and Tongue Videos with a Convolutional Vocoder".
 
 ## Prepare Dataset
+
 To start with: please make out/ data/ log/ dir as follow.
+
 ```
 mkdir out/ data/ log/ 
 ```
-and put Songs_Audio/ Songs_EGG/ Songs_lips/ Songs_Tongue/ into data/
+
+Download data from https://github.com/TjuJianyu/SSI_dataset.git and move all .tar.gz files to ./data/
+
+Then unzip all files by:
+
+```
+cd SSI_DL/data
+tar -xzf songs_audio.tar.gz
+tar -xzf resize_lips.part1.tar.gz 
+tar -xzf resize_lips.part1.tar.gz 
+mkdir ../out/resize_lips 
+mv part_*/* ../out/resize_lips 
+
+tar -xzf resize_tongue.part1.tar.gz 
+tar -xzf resize_tongue.part1.tar.gz 
+mkdir ../out/resize_tongue 
+mv part_*/* ../out/resize_tongue
+```
+
+
 
 ## Preprocessing 
-### Image resize
-Resize lips and tongue image to (50,42)
-Run
-```
-python image_preprocessing.py
-```
+
 ### Audio downsample
 Downsample audio and EGG to 16khz and 10.025khz
-Run
+
 ```
 python utils/downsample.py
 ```
 ### Calculating LSF for original Audio
-Run
+
 ```
-python audio2lsf.py
+python utils/audio2lsf.py
 ```
 
-## 1. LSF predicting
-In this section, we want to predict LSF from lips and tongue.
-### Comparing different architectures (It can still gain better by furder parameter tuning. I only tune a little bit.)
-Run
-Run
+### Extract F0
+
 ```
-python experiments_lips_tongues_lsf.py
-```
-## 2. Reproducing Audio by EGG
-It is interesting to predict original audio from EGG.
-Run
+python extract_f0.py
 ```
 
 
-## 3. F0 predicting
+## Learning LSF from lips and tongue 
+Train a cnn model to predict LSF coefficients from lips and tongue images. 
 
+```
+python train_lsf.py
+```
+## Learning F0 from lips and tongue
+
+```
+python train_f0.py
+```
+
+## Learning U/V flat from lips and tongue
+
+```
+python train_uv.py
+```
+
+
+## CNN Vocoder
+Learning audio from LSF, F0 and U/V flat. 
+
+```
+python train_cnn_vocoder.py
+```
+
+
+## Generate Audio 
+Sythesis audios from lips and tongue images. 
+
+```
+python test_cnn_vocode.py
+```
 
