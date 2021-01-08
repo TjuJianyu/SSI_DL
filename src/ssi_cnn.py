@@ -3,9 +3,9 @@ import numpy as np
 from spectrum import linear_prediction as lpd
 import time
 import random
-import soundfile as sf
+
 import tensorflow as tf
-import cv2
+
 from audiolazy import lpc
 from matplotlib import pyplot as plt
 import scipy.signal as spsig
@@ -284,8 +284,10 @@ def target_preprocessing(train_lsf, test_lsf, classification, order=12):
     test_ys = []
     if classification > 0:
         for i in range(order):
+
             tr_i_max = train_lsf[:, i].max()
             tr_i_min = train_lsf[:, i].min()
+            print('len train_lsf', len(train_lsf))
             cl_train_lsf = (classification * ((train_lsf[:, i] - tr_i_min) / (tr_i_max - tr_i_min))).astype(int)
             cl_train_lsf[cl_train_lsf >= classification] = classification - 1
             cl_train_lsf = tf.keras.utils.to_categorical(cl_train_lsf, classification)
@@ -399,9 +401,9 @@ def data_preprocessing(train_tongue, train_lips, train_lsf, test_tongue, test_li
     return data[0], data[1], data[4], data[2], data[3], data[5]
 
 
-def keras_train(path="../out/test_lsf/lsf_hamming_ds4.pkl", \
+def keras_train(path, \
                 conv3d=False, classification=0, order=12, multi_task=True, IS16=False, fakeIS16=False, \
-                optimizer='adam', lr=0.0001, AE=False, name='',epochs=30):
+                optimizer='adam', lr=0.0001, AE=False, name='',epochs=50):
     print(optimizer)
 
     print(multi_task)
@@ -453,18 +455,22 @@ def keras_train(path="../out/test_lsf/lsf_hamming_ds4.pkl", \
             train_ys.append(train_tongue)
             train_ys.append(train_lips)
         for i in range(epochs):
-           hist = model.fit([train_tongue,train_lips],train_ys,\
+            print(train_tongue.shape,train_lips.shape)
+            for val in train_ys:
+                print(val.shape)
+                
+            hist = model.fit([train_tongue,train_lips],train_ys,\
                          validation_split=0.05,\
                          verbose=2,\
                          batch_size=512,initial_epoch=i,epochs=i+1,shuffle=True,\
                          callbacks=[model_checkpoint])
-           predict = model.predict([test_tongue,test_lips],batch_size=512)
-           sd, is16sd,predict_lsf = measure(test_lsf,predict,train_lsf,classification)
-           targetloss = sum([hist.history['val_pred_lsf%i_categorical_crossentropy' % i][0] for i in range(12)])
-           lipsmseloss = hist.history['val_lips_decode_loss'][0]
-           tongmseloss = hist.history['val_tongue_decode_loss'][0]
-           print(targetloss,lipsmseloss,tongmseloss)
-           print('is16sd',is16sd)
+            predict = model.predict([test_tongue,test_lips],batch_size=512)
+            sd, is16sd,predict_lsf = measure(test_lsf,predict,train_lsf,classification)
+            targetloss = sum([hist.history['val_pred_lsf%i_categorical_crossentropy' % i][0] for i in range(12)])
+            lipsmseloss = hist.history['val_lips_decode_loss'][0]
+            tongmseloss = hist.history['val_tongue_decode_loss'][0]
+            print(targetloss,lipsmseloss,tongmseloss)
+            print('is16sd',is16sd)
         predict = model.predict([test_tongue, test_lips], batch_size=512)
         sd, is16sd, predict_lsf = measure(test_lsf, predict, train_lsf, classification,order=order)
         f = open("../out/%s/predict_is16sd%.3f.pkl" % (EXP_NAME, is16sd), 'wb')

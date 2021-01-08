@@ -1,21 +1,26 @@
+
 import wave
 import numpy as np
 from spectrum import linear_prediction as lpd
 import time
 import random
 import tensorflow as tf
+import soundfile as sf 
 import cv2
 from audiolazy import lpc
+import audiolazy
 import scipy.signal as spsig
+
 import os
 from tqdm import tqdm
 import pickle
 import datetime
+
 from scipy import signal
 import math
 import argparse
 import scipy.io as sio
-import soundfile as sf
+
 import heapq
 from scipy import optimize
 import wave
@@ -154,59 +159,76 @@ def musicdata_wavereader(normalized=True):
 
     return wave_dataset, nchannels, sampwidth, framerate, totalnframes
 
-def loadeggsong(data_dir = '../out/',size = 16000 * 1.0/60):
+def loadeggsong(data_dir = '../out/',freq = 16000, size = 16000 * 1.0/60,usefilter=False):
+    if os.path.isfile('../out/soundfile.pkl'):
+        f = open('../out/soundfile.pkl','rb')
+        trainsong, testsong = pickle.load(f)
+        f.close()
+    else:
+        wave_data = []
+        #egg_data = []
+        for i in range(5):
+            f = open(data_dir + 'song%d_%dhz.wav' % (i + 1, freq), 'rb')
+            data, samplerate = sf.read(f, dtype='int16')
+            print(len(data *1.0/freq * 60))
+            wave_data.extend(data.tolist())
+            # f = open(data_dir + 'egg%d.wav' % (i + 1), 'rb')
+            # data, samplerate = sf.read(f, dtype='int16')
+            # egg_data.extend(data.tolist()
+        gap = math.ceil(16000.0 / 60 * 68146) - len(wave_data)
+        if gap > 0:
+            print(gap)
+            wave_data.extend([0]*gap)
 
-    wave_data = []
-    egg_data = []
-    for i in range(5):
-        f = open(data_dir + 'song%d.wav' % (i + 1), 'rb')
-        data, samplerate = sf.read(f, dtype='int16')
-        wave_data.extend(data.tolist()[:-int(size * 10)])
-        f = open(data_dir + 'egg%d.wav' % (i + 1), 'rb')
-        data, samplerate = sf.read(f, dtype='int16')
-        egg_data.extend(data.tolist()[:-int(size * 10)])
+        wave_data = np.array(wave_data, dtype='float32')
+        if usefilter:
+            print('use filter')
+            wave_data = spsig.lfilter([1, -0.95], 1, wave_data)
 
-    wave_data = np.array(wave_data, dtype='float32')
-    mean = wave_data.mean()
-    std = wave_data.std()
-    wave_data -= mean
-    wave_data /= std
+        mean = wave_data.mean()
+        std = wave_data.std()
+        wave_data -= mean
+        wave_data /= std
 
-    egg_data = np.array(egg_data, dtype='float32')
-    mean = egg_data.mean()
-    std = egg_data.std()
-    egg_data -= mean
-    egg_data /= std
-    egg_data = np.concatenate([[0] * 30, egg_data[:-30]])
+        # egg_data = np.array(egg_data, dtype='float32')
+        # mean = egg_data.mean()
+        # std = egg_data.std()
+        # egg_data -= mean
+        # egg_data /= std
+        #egg_data = np.concatenate([[0] * 30, egg_data[:-30]])
 
-    data = []
-    ydata = []
-    for i in range(int(len(wave_data) / size)):
-        instance = wave_data[int(i * size):int((i) * size) + int(size)]
-        ydata.append(instance)
-        egginstance = egg_data[int(i * size):int((i) * size) + int(size)]
-        data.append(egginstance)
+        data = []
+        ydata = []
+        for i in range(int(len(wave_data) / size)):
+            instance = wave_data[int(i * size):int((i) * size) + int(size)]
+            ydata.append(instance)
+            # egginstance = egg_data[int(i * size):int((i) * size) + int(size)]
+            # data.append(egginstance)
 
-    data = np.array(data, dtype='float')
-    ydata = np.array(ydata, dtype='float')
+        # data = np.array(data, dtype='float')
+        ydata = np.array(ydata, dtype='float')
 
-    # data = data.tolist()
-    # (len(data))
-    cnn = True
+        # data = data.tolist()
+        # (len(data))
+        cnn = True
 
-    trainegg = np.concatenate([data[:25000], data[30000:]])
-    testegg = np.array(data[25000:30000])
-    trainsong = np.concatenate([ydata[:25000], ydata[30000:]])
-    testsong = np.array(ydata[25000:30000])
+        # trainegg = np.concatenate([data[:25000], data[30000:]])
+        # testegg = np.array(data[25000:30000])
+        trainsong = np.concatenate([ydata[:25000], ydata[30000:]])
+        testsong = np.array(ydata[25000:30000])
 
-    return trainegg,testegg,trainsong,testsong
+    return None,None,trainsong,testsong
 
-def load_dataset(path="../out/test_lsf/lsf_hamming_16kHZ.pkl", IS16=False, fakeIS16=False, reshape=False):
+def load_dataset(path, IS16=False, fakeIS16=False, reshape=False):
     print('loading...')
     if IS16:
+        print(path)
         f = open(path, "rb")
         lsf = pickle.load(f)[0]
+        
+        
         lsf = lsf.tolist()
+        print(len(lsf))
         train_lsf = lsf[:25000]
         train_lsf.extend(lsf[30000:])
         train_lsf = np.array(train_lsf)
@@ -229,7 +251,7 @@ def load_dataset(path="../out/test_lsf/lsf_hamming_16kHZ.pkl", IS16=False, fakeI
                     ran = '0' + ran
                 #print(lips_fdir % ran)
                 lframe_0 = cv2.imread(lips_fdir % ran, 0)
-                #print(lframe_0)
+                
                 lframe_0.resize(48, 48)
                 lframe_0 = np.array(lframe_0)
                 #print(lframe_0)
@@ -253,90 +275,56 @@ def load_dataset(path="../out/test_lsf/lsf_hamming_16kHZ.pkl", IS16=False, fakeI
             f = open('../out/IS16_train_test_tongue_lips.pkl','wb')
             pickle.dump([train_lips,test_lips,train_tongue,test_tongue],f)
             f.close()
-    # elif os.path.exists("../out/train_tongue_01.pkl") and \
-    # os.path.exists("../out/train_lips_01.pkl") and \
-    # os.path.exists("../out/train_lsf_01.pkl"):
-    #    f1 = open("../out/train_tongue_01.pkl","rb")
-    #    f2 = open("../out/train_lips_01.pkl","rb")
-    #    f3 = open("../out/train_lsf_01.pkl","rb")
-    #    f4 = open("../out/test_tongue_01.pkl","rb")
-    #    f5 = open("../out/test_lips_01.pkl","rb")
-    #    f6 = open("../out/test_lsf_01.pkl","rb")
-    #    train_tongue = pickle.load(f1)
-    #    train_lips = pickle.load(f2)
-    #    train_lsf = pickle.load(f3)
-    #    test_tongue = pickle.load(f4)
-    #    test_lips = pickle.load(f5)
-    #    test_lsf = pickle.load(f6)
+    print('size train,test',len(train_lips),len(test_lips))
+    # else:
+    #     f = open(path, "rb")
+    #     lsf = pickle.load(f)
+    #     lips = []
+    #     tongue = []
+    #     tong_fdir = "../out/resize_tongue/%s.tif"
+    #     lips_fdir = "../out/resize_lips/%s.tif"
+    #     for i in tqdm(range(1, 68147)):
 
-    else:
-        f = open(path, "rb")
-        lsf = pickle.load(f)
-        lips = []
-        tongue = []
-        tong_fdir = "../out/resize_tongue/%s.tif"
-        lips_fdir = "../out/resize_lips/%s.tif"
-        for i in tqdm(range(1, 68147)):
+    #         ran = str(i)
+    #         for i in range(6 - len(ran)):
+    #             ran = '0' + ran
+    #         lframe_0 = cv2.imread(lips_fdir % ran, 0)
+    #         lframe_0.resize(48, 48)
+    #         lframe_0 = np.array(lframe_0)
+    #         lips.append(lframe_0.reshape((lframe_0.shape[0], lframe_0.shape[1], 1)))
 
-            ran = str(i)
-            for i in range(6 - len(ran)):
-                ran = '0' + ran
-            lframe_0 = cv2.imread(lips_fdir % ran, 0)
-            lframe_0.resize(48, 48)
-            lframe_0 = np.array(lframe_0)
-            lips.append(lframe_0.reshape((lframe_0.shape[0], lframe_0.shape[1], 1)))
+    #         tframe_0 = cv2.imread(tong_fdir % ran, 0)
+    #         tframe_0.resize(48, 48)
+    #         tframe_0 = np.array(tframe_0)
+    #         tongue.append(tframe_0.reshape((tframe_0.shape[0], tframe_0.shape[1], 1)))
+    #     testrate = 0.1
+    #     length = np.array([10670146, 7050413, 13645126, 5311110, 13410518])
+    #     length = (length / 44100 * 60)
+    #     test = length * testrate
+    #     left = length.cumsum() - test
+    #     right = length.cumsum()
+    #     left = left.astype(int)
+    #     right = right.astype(int)
+    #     test_lips, train_lips, test_tongue, train_tongue, test_lsf, train_lsf = [], [], [], [], [], []
+    #     for i in range(len(left)):
+    #         test_lips.extend(lips[left[i]:right[i]])
+    #         test_tongue.extend(tongue[left[i]:right[i]])
+    #         test_lsf.extend(lsf[left[i]:right[i]])
 
-            tframe_0 = cv2.imread(tong_fdir % ran, 0)
-            tframe_0.resize(48, 48)
-            tframe_0 = np.array(tframe_0)
-            tongue.append(tframe_0.reshape((tframe_0.shape[0], tframe_0.shape[1], 1)))
-        testrate = 0.1
-        length = np.array([10670146, 7050413, 13645126, 5311110, 13410518])
-        length = (length / 44100 * 60)
-        test = length * testrate
-        left = length.cumsum() - test
-        right = length.cumsum()
-        left = left.astype(int)
-        right = right.astype(int)
-        test_lips, train_lips, test_tongue, train_tongue, test_lsf, train_lsf = [], [], [], [], [], []
-        for i in range(len(left)):
-            test_lips.extend(lips[left[i]:right[i]])
-            test_tongue.extend(tongue[left[i]:right[i]])
-            test_lsf.extend(lsf[left[i]:right[i]])
-
-        for i in range(len(left)):
-            if i == 0:
-                start = 0
-            else:
-                start = right[i - 1]
-            train_lips.extend(lips[start:left[i]])
-            train_tongue.extend(tongue[start:left[i]])
-            train_lsf.extend(lsf[start:left[i]])
-        train_lips = np.array(train_lips, dtype=int)
-        train_tongue = np.array(train_tongue, dtype=int)
-        train_lsf = np.array(train_lsf)
-        test_lips = np.array(test_lips, dtype=int)
-        test_tongue = np.array(test_tongue, dtype=int)
-        test_lsf = np.array(test_lsf)
-        # print(test_lsf)
-        # f1 = open("../out/train_tongue_01.pkl","wb")
-        # f2 = open("../out/train_lips_01.pkl","wb")
-        # f3 = open("../out/train_lsf_01.pkl","wb")
-        # f4 = open("../out/test_tongue_01.pkl","wb")
-        # f5 = open("../out/test_lips_01.pkl","wb")
-        # f6 = open("../out/test_lsf_01.pkl","wb")
-        # pickle.dump(train_tongue,f1)
-        # pickle.dump(train_lips,f2)
-        # pickle.dump(train_lsf,f3)
-        # pickle.dump(test_tongue,f4)
-        # pickle.dump(test_lips,f5)
-        # pickle.dump(test_lsf,f6)
-        # f1.close()
-        # f2.close()
-        # f3.close()
-        # f4.close()
-        # f5.close()
-        # f6.close()
+    #     for i in range(len(left)):
+    #         if i == 0:
+    #             start = 0
+    #         else:
+    #             start = right[i - 1]
+    #         train_lips.extend(lips[start:left[i]])
+    #         train_tongue.extend(tongue[start:left[i]])
+    #         train_lsf.extend(lsf[start:left[i]])
+    #     train_lips = np.array(train_lips, dtype=int)
+    #     train_tongue = np.array(train_tongue, dtype=int)
+    #     train_lsf = np.array(train_lsf)
+    #     test_lips = np.array(test_lips, dtype=int)
+    #     test_tongue = np.array(test_tongue, dtype=int)
+    #     test_lsf = np.array(test_lsf)
 
     return train_tongue, train_lips, train_lsf, test_tongue, test_lips, test_lsf
 
@@ -392,8 +380,12 @@ def spectral_distortion(lsf_true, lsf_pred, N, n0, n1):
     return SD, IS16SD, sum(SD) * 1.0 / len(SD), sum(IS16SD) * 1.0 / len(IS16SD)
 
 
-def vocoder(lsf, activation, fs=16000, hamming=True, frame_length=1 / 60, overlap_percent=50):
-    exact_frame_length = fs * frame_length
+def vocoder(lsf, activation, fs=16000, hamming=True, frame_length=1 / 60, overlap_percent=50,frame_pixel=None):
+    if frame_pixel is None:
+        exact_frame_length = fs * frame_length
+    else:   
+        exact_frame_length = frame_pixel
+
     signal_length = len(activation)
     print(signal_length)
     downsample_audio_data = np.hstack([np.array([0] * int(exact_frame_length / 2)) , activation, np.array([0] * int(exact_frame_length / 2))])
@@ -420,12 +412,14 @@ def vocoder(lsf, activation, fs=16000, hamming=True, frame_length=1 / 60, overla
 # len(lsf)
 def audio2lsf(audio_data, fps, order, \
               usefilter=True, frame_length=1 / 60,  bins=-1):
+    print(len(audio_data))
     if usefilter:
         downsample_audio_data = spsig.lfilter([1, -0.95], 1, audio_data)
 
     exact_frame_length = fps * frame_length
     signal_length = len(downsample_audio_data)
-
+    print(signal_length)
+    print(exact_frame_length)
     lsf = []
     error = 0
     reproduce = []
@@ -433,25 +427,28 @@ def audio2lsf(audio_data, fps, order, \
     downsample_audio_data = np.hstack([np.array([0] * int(exact_frame_length / 2)) \
                                           , downsample_audio_data, np.array([0] * int(exact_frame_length / 2))])
 
+
     for i in tqdm(range(int(signal_length / exact_frame_length))):
         start_index = int(i * exact_frame_length) - int(exact_frame_length / 2) + int(exact_frame_length / 2)
         stop_index = int((i + 1) * exact_frame_length) + int(exact_frame_length / 2) + int(exact_frame_length / 2)
         frame = downsample_audio_data[start_index:stop_index] * spsig.hamming(stop_index - start_index)
         lpcfilter = lpc.nautocor(frame, order)
-
         reproduce_iter = list(lpcfilter(frame))
         reproduce.extend(reproduce_iter)
 
         err = ((frame - np.array(reproduce_iter)) ** 2).mean()
         error += err
         lpcfilter = list(lpcfilter)[0]
-        lsfPframe = lpd.poly2lsf([lpcfilter[i] for i in range(order + 1)])
+        if len(lpcfilter) == 1:
+            lpcfilter = [1] + [0]*order
+
+        lsfPframe = lpd.poly2lsf([lpcfilter[j] for j in range(order + 1)])
         if bins > 0:
             lsfPframe
         lsf.append(lsfPframe)
     error = error / i
     print("error MSE:%.6f" % (error))
-
+    print(len(lsf))
     return np.array(lsf), np.array(reproduce), error
 if __name__ == "__main__":
     pass

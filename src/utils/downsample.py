@@ -15,6 +15,7 @@ from scipy import signal
 import math
 import argparse
 import scipy.io as sio
+import audioop
 def downsampleWav(src, dst, inrate=44100, outrate=16000, inchannels=1, outchannels=1):
     if not os.path.exists(src):
         print('Source not found!')
@@ -33,14 +34,9 @@ def downsampleWav(src, dst, inrate=44100, outrate=16000, inchannels=1, outchanne
     n_frames = s_read.getnframes()
     data = s_read.readframes(n_frames)
 
-    try:
-        converted = audioop.ratecv(data, 2, inchannels, inrate, outrate, None)
-        if outchannels == 1 & inchannels != 1:
-            converted[0] = audioop.tomono(converted[0], 2, 1, 0)
-    except:
-        print('Failed to downsample wav')
-        return False
-
+    converted = audioop.ratecv(data, 2, inchannels, inrate, outrate, None)
+    if outchannels == 1 & inchannels != 1:
+        converted[0] = audioop.tomono(converted[0], 2, 1, 0)
     try:
         s_write.setparams((outchannels, 2, outrate, 0, 'NONE', 'Uncompressed'))
         s_write.writeframes(converted[0])
@@ -74,14 +70,10 @@ if __name__ == "__main__":
     #args = parse_args()
     #downsampleWav(args.srcpath,args.dstpath,args.inrate,args.outrate)
 
-    song_name = "../data/Songs_Audio/MICRO_RecFile_1_20140523_%s_Micro_EGG_Sound_Capture_monoOutput1.wav"
-    for i,val in enumerate(['184341', '190633', '192504', '193153', '193452']):
-        downsampleWav(song_name % val,'../out/song%d.wav' % i ,44100,16000)
-        downsampleWav(song_name % val, '../out/song%d_10025.wav' % i, 44100, 10025)
+    song_name = "../data/Songs_Audio_matched/song%d_matched_%s.wav"
+    for i,val in enumerate(['190633','184341', '192504', '193153', '193452']):
+        downsampleWav(song_name % (i+1,val),'../out/song%d_16000hz.wav' % (i+1) ,44100,16000)
+        downsampleWav(song_name % (i+1,val),'../out/song%d_11025hz.wav' % (i+1), 44100,11025)
 
-    egg_name = '../data/Songs_EGG/EGG_RecFile_1_20140523_%s_Micro_EGG_Sound_Capture_monoOutput2.wav'
-    for i, val in enumerate(['193452', '193153', '192504', '190633', '184341']):
-        downsampleWav(egg_name % val, '../out/egg%d.wav' % i, 44100, 16000)
-        downsampleWav(egg_name % val, '../out/egg%d_10025.wav' % i, 44100, 10025)
 
 
