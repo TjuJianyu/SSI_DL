@@ -1,6 +1,6 @@
 # SSI_DL
 
-This is the code for silent speech interface paper "Creating Song from Lip and Tongue Videos with a Convolutional Vocoder".
+This is the code for silent speech interface paper ["Creating Song from Lip and Tongue Videos with a Convolutional Vocoder"](https://ieeexplore.ieee.org/document/9319643?source=authoralert).
 
 ## Prepare Dataset
 
@@ -10,7 +10,7 @@ To start with: please make out/ data/ log/ dir as follow.
 mkdir out/ data/ log/ 
 ```
 
-Download data from https://github.com/TjuJianyu/SSI_dataset.git and move all .tar.gz files to ./data/
+Download data from [here](https://github.com/TjuJianyu/SSI_dataset.git) and move all .tar.gz files to ./data/
 
 Then unzip all files by:
 
