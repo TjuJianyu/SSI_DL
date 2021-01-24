@@ -10,7 +10,7 @@ To start with: please make out/ data/ log/ dir as follow.
 mkdir out/ data/ log/ 
 ```
 
-Download data from [here](https://github.com/TjuJianyu/SSI_dataset.git) and move all .tar.gz files to ./data/
+We public our preprocessed dataset. You can download data from [here](https://github.com/TjuJianyu/SSI_dataset.git) and move all .tar.gz files to ./data/
 
 Then unzip all files by:
 
