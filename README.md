@@ -85,3 +85,16 @@ Sythesis audios from lips and tongue images.
 python test_cnn_vocode.py
 ```
 
+# Citation 
+If it is helpful, please cite:
+```
+@article{zhang2021creating,
+  title={Creating song from lip and tongue videos with a convolutional vocoder},
+  author={Zhang, Jianyu and Roussel, Pierre and Denby, Bruce},
+  journal={IEEE Access},
+  volume={9},
+  pages={13076--13082},
+  year={2021},
+  publisher={IEEE}
+}
+```
